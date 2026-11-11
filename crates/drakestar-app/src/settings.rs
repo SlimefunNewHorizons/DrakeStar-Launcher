@@ -12,6 +12,15 @@ pub struct Settings {
     /// Perfil activo en la UI.
     #[serde(default)]
     pub active_profile: Option<String>,
+    /// Sesión de Microsoft autenticada (UUID con guiones).
+    #[serde(default)]
+    pub session_uuid: Option<String>,
+    /// Token de acceso para validar la sesión en servidores online-mode.
+    #[serde(default)]
+    pub session_token: Option<String>,
+    /// Nombre de la cuenta de Minecraft autenticada.
+    #[serde(default)]
+    pub session_name: Option<String>,
 }
 
 impl Settings {
@@ -45,6 +54,9 @@ mod tests {
             java_path: Some("/opt/j/bin/java".into()),
             username: Some("nix".into()),
             active_profile: Some("a".into()),
+            session_uuid: Some("11111111-2222-3333-4444-555555555555".into()),
+            session_token: Some("mc_token_123".into()),
+            session_name: Some("JackStar".into()),
         };
         s.save(&l).unwrap();
         assert_eq!(Settings::load(&l), s);

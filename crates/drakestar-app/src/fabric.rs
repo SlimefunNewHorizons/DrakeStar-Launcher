@@ -444,13 +444,21 @@ pub fn resolve_assets_dir_for_version(inst: &Path, index_id: Option<&str>) -> Pa
     crate::assets::resolve_assets_dir(inst, index_id)
 }
 
-/// Plan de lanzamiento del cliente (sin ejecutar).
-pub fn plan(l: &Layout, p: &Profile, java_bin: &str, username: &str) -> AppResult<fabric::ClientPlan> {
+/// Plan de lanzamiento del cliente con credenciales de sesión opcionales (sin ejecutar).
+pub fn plan_with_session(
+    l: &Layout,
+    p: &Profile,
+    java_bin: &str,
+    username: &str,
+    uuid: Option<&str>,
+    access_token: Option<&str>,
+) -> AppResult<fabric::ClientPlan> {
     let (version, cache) = cached(l, &p.id).ok_or_else(|| AppError::NotFound("cliente no instalado".into()))?;
     let inst = instance_dir(l, &p.id);
     let cp = classpath(l, p)?;
     let index_id = version.asset_index.as_ref().map(|a| a.id.as_str());
     let assets_dir = resolve_assets_dir_for_version(&inst, index_id);
+    let user_type = if access_token.is_some() { Some("msa") } else { None };
     fabric::client_plan(
         p,
         &version,
@@ -464,16 +472,27 @@ pub fn plan(l: &Layout, p: &Profile, java_bin: &str, username: &str) -> AppResul
             version_label: &format!("fabric-loader-{}-{}", cache.entry.loader.version, p.minecraft),
             launcher_name: "DrakeStar",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            uuid: None,
-            access_token: None,
-            user_type: None,
+            uuid,
+            access_token,
+            user_type,
         },
     )
     .ok_or_else(|| AppError::Invalid("este perfil no lanza un cliente Fabric".into()))
 }
 
-/// Nombre de usuario offline: de los ajustes, o el id del perfil.
+/// Plan de lanzamiento del cliente (sin ejecutar).
+pub fn plan(l: &Layout, p: &Profile, java_bin: &str, username: &str) -> AppResult<fabric::ClientPlan> {
+    plan_with_session(l, p, java_bin, username, None, None)
+}
+
+/// Nombre de usuario para el cliente: de la sesión autenticada, de los ajustes, o el id del perfil.
 pub fn username(s: &crate::settings::Settings, p: &Profile) -> String {
+    if let Some(ref name) = s.session_name {
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
     s.username
         .as_deref()
         .map(str::trim)
@@ -602,6 +621,8 @@ mod tests {
         assert_eq!(username(&s2, &p), "cli");
         s2.username = Some("nix".into());
         assert_eq!(username(&s2, &p), "nix");
+        s2.session_name = Some("JackStar".into());
+        assert_eq!(username(&s2, &p), "JackStar");
     }
 
     /// Smoke test REAL contra los servidores de Mojang y Fabric: resuelve,

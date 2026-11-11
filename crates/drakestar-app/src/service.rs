@@ -232,7 +232,15 @@ impl Service {
     /// Plan del cliente (sin ejecutar), para mostrarlo en la UI.
     pub fn client_plan(&self, id: &str) -> AppResult<String> {
         let p = self.store.get(id)?;
-        let plan = fabric::plan(&self.layout, &p, &self.settings().java_bin(), &fabric::username(&self.settings(), &p))?;
+        let settings = self.settings();
+        let plan = fabric::plan_with_session(
+            &self.layout,
+            &p,
+            &settings.java_bin(),
+            &fabric::username(&settings, &p),
+            settings.session_uuid.as_deref(),
+            settings.session_token.as_deref(),
+        )?;
         Ok(format!("{} {}\n(cwd: {})", plan.program, plan.args.join(" "), plan.cwd))
     }
 
@@ -246,7 +254,14 @@ impl Service {
         self.mods_decide(id)?;
         self.native_load(id)?;
         let settings = self.settings();
-        let plan = fabric::plan(&self.layout, &p, &settings.java_bin(), &fabric::username(&settings, &p))?;
+        let plan = fabric::plan_with_session(
+            &self.layout,
+            &p,
+            &settings.java_bin(),
+            &fabric::username(&settings, &p),
+            settings.session_uuid.as_deref(),
+            settings.session_token.as_deref(),
+        )?;
         let st = fabric::status(&self.layout, &p);
         if !st.ready {
             return Err(AppError::NotFound(format!("el cliente no esta instalado ({})", st.reason.unwrap_or_default())));

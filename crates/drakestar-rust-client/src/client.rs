@@ -251,6 +251,28 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
             let _ = proto::send_packet_compressed(&mut sock, id, &body, compression_threshold);
         }
 
+        // Transicion de fase Configuracion -> Play (Finish Configuration en 1.20.2+)
+        if (id == 0x02 || id == 0x03) && body.is_empty() {
+            let _ = proto::send_packet_compressed(&mut sock, 0x02, &[], compression_threshold);
+            out("fase de configuracion finalizada; entrando en play");
+        }
+
+        // Deteccion de apertura de interfaz de inventario / Slimefun GUI (Open Screen: 0x33 en 1.21+, 0x31 en 1.20)
+        if (id == 0x33 || id == 0x31 || id == 0x2e) && !body.is_empty() {
+            let mut cur = std::io::Cursor::new(&body);
+            if let Ok(window_id) = proto::read_varint(&mut cur) {
+                if let Ok(window_type) = proto::read_varint(&mut cur) {
+                    let pos = cur.position() as usize;
+                    let title = if pos < body.len() {
+                        chat_text(&body[pos..])
+                    } else {
+                        String::new()
+                    };
+                    out(&format!("interfaz abierta: ventana #{window_id} tipo {window_type} ({title})"));
+                }
+            }
+        }
+
         out(&format!("paquete 0x{id:02x} ({} bytes)", body.len()));
     }
     Ok(())
@@ -318,6 +340,40 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("login correcto")));
         assert!(lines.iter().any(|l| l.contains("0x57")));
         assert!(lines.iter().any(|l| l.contains("0x58") && l.contains("2 bytes")));
+    }
+
+    #[test]
+    fn configuration_finish_and_open_container_are_handled() {
+        let (lines, res) = collect(
+            &cfg(0),
+            |r, w| {
+                let (hs, _) = proto::read_packet(r).unwrap();
+                assert_eq!(hs, 0x00);
+                let (start, _) = proto::read_packet(r).unwrap();
+                assert_eq!(start, LOGIN_START);
+                let mut body = Vec::new();
+                proto::write_string(&mut body, "ok");
+                proto::send_packet(w, PKT_LOGIN_SUCCESS, &body).unwrap();
+                let (ack, _) = proto::read_packet(r).unwrap();
+                assert_eq!(ack, LOGIN_ACKNOWLEDGED);
+
+                // 1) Enviar Finish Configuration (0x02)
+                proto::send_packet(w, 0x02, &[]).unwrap();
+                let (fin_ack, fin_body) = proto::read_packet(r).unwrap();
+                assert_eq!((fin_ack, fin_body.len()), (0x02, 0));
+
+                // 2) Enviar Open Screen (0x33) para Slimefun Guide
+                let mut gui = Vec::new();
+                proto::write_varint(&mut gui, 12); // window_id 12
+                proto::write_varint(&mut gui, 1);  // chest 9x1
+                proto::write_string(&mut gui, r#"{"text":"Guía Slimefun (StarSuites)"}"#);
+                proto::send_packet(w, 0x33, &gui).unwrap();
+                w.flush().unwrap();
+            },
+        );
+        assert!(res.is_ok(), "{res:?}");
+        assert!(lines.iter().any(|l| l.contains("fase de configuracion finalizada")));
+        assert!(lines.iter().any(|l| l.contains("ventana #12") && l.contains("Guía Slimefun")));
     }
 
     #[test]
