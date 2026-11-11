@@ -29,14 +29,34 @@ pub struct PrismImportResult {
     pub mods_imported: usize,
 }
 
-/// Rutas canónicas donde Prism Launcher almacena instancias en Linux/POSIX
+/// Rutas canónicas donde Prism Launcher almacena instancias (Linux, macOS, Windows).
 pub fn prism_instances_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
+
+    // 1. Linux / POSIX / macOS
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        roots.push(home.join(".local/share/PrismLauncher/instances"));
+        let xdg_data = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local/share"));
+
+        roots.push(xdg_data.join("PrismLauncher/instances"));
+        roots.push(xdg_data.join("prismlauncher/instances"));
+
+        // Flatpak Prism Launcher
         roots.push(home.join(".var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances"));
-        roots.push(home.join(".local/share/prismlauncher/instances"));
+
+        // macOS Application Support
+        roots.push(home.join("Library/Application Support/PrismLauncher/instances"));
     }
+
+    // 2. Windows (%APPDATA%, %LOCALAPPDATA%)
+    if let Some(appdata) = std::env::var_os("APPDATA").map(PathBuf::from) {
+        roots.push(appdata.join("PrismLauncher/instances"));
+    }
+    if let Some(localappdata) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        roots.push(localappdata.join("PrismLauncher/instances"));
+    }
+
     roots
 }
 
