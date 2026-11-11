@@ -93,7 +93,16 @@
     </div>
     <div class="field">
       <label for="pf-mc">Versión de Minecraft</label>
-      <input id="pf-mc" bind:value={p.minecraft} required />
+      <input id="pf-mc" bind:value={p.minecraft} list="mc-versions" required placeholder="p. ej. 26.2 o 1.21.4" />
+      <datalist id="mc-versions">
+        <option value="26.2">26.2 (DrakesPurpur / DrakesRust)</option>
+        <option value="1.21.4">1.21.4 (LTS reciente)</option>
+        <option value="1.21.1">1.21.1 (Producción Dallas)</option>
+        <option value="1.20.4">1.20.4</option>
+        <option value="1.20.1">1.20.1 (Ecosistema Mods)</option>
+        <option value="1.19.4">1.19.4</option>
+        <option value="1.16.5">1.16.5 (Legacy)</option>
+      </datalist>
     </div>
   </div>
 
