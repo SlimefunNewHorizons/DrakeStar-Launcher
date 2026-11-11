@@ -11,10 +11,27 @@
 </script>
 
 <h1>DrakesJava — {p.name}</h1>
-<div class="alert warn">El lanzamiento de clientes Java (descarga de versión, loaders, JRE gestionado) está <strong>pendiente</strong> (v0.4). Hoy puedes definir y validar el perfil, la memoria y el canal.</div>
+<div class="alert ok" style="border-left: 3px solid #10b981; background: rgba(16, 185, 129, 0.08); color: #34d399;">
+  🎮 <strong>Cliente Minecraft Java (Fabric) Activo:</strong> Descarga automatizada de librerías, renderizado OpenGL / Vulkan, modo pantalla completa y enlace directo a servidores.
+</div>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
   <section class="card stack"><h2>Perfil</h2><ProfileSummary {p} />
-    <button class="btn" style="align-self:start" onclick={() => router.go('/profiles')}>Editar en Perfiles</button></section>
+    <div class="row" style="gap: 0.5rem; margin-top: 0.5rem;">
+      <button class="btn primary" onclick={async () => {
+        app.notify('info', `Comprobando y lanzando cliente Minecraft Java (${p.loader})...`);
+        let st = await api.clientStatus(p.id).catch(() => null);
+        if (!st || !st.ready) {
+          app.notify('info', 'Descargando artefactos de Minecraft y Fabric...');
+          await api.clientInstall(p.id);
+        }
+        await api.clientStart(p.id);
+        app.notify('ok', `🎮 ¡Proceso de Minecraft iniciado (${p.name})!`);
+        router.go('/instances');
+      }}>🎮 Lanzar Minecraft</button>
+      <button class="btn" onclick={() => router.go('/profiles')}>Editar Perfil</button>
+    </div>
+  </section>
+
   <section class="card stack"><h2>Java del sistema</h2>
     {#if !java}<p class="muted">Comprobando…</p>
     {:else}

@@ -162,11 +162,22 @@
   {/if}
   {#if p.mode === 'local-server'}
     <div class="field">
-      <label for="pf-preset">Preset</label>
-      <input id="pf-preset" value={p.preset ?? ''} oninput={(e) => (p.preset = e.currentTarget.value)} />
-      <div class="hint">El preset Slimefun todavía no copia plugins automáticamente (pendiente).</div>
+      <label for="pf-preset">Preset de Plugins (Mundo Personal / LAN)</label>
+      <select id="pf-preset" bind:value={p.preset}>
+        <option value="slimefun-classic">⭐ Slimefun v11 + StarSuites 20k+ (Por defecto)</option>
+        <option value="vanilla">🌱 Vanilla Puro (Sin Slimefun · Mundo Personal Estándar)</option>
+        <option value="">⚙️ Vacío / Personalizado (Gestión manual de plugins)</option>
+      </select>
+      <div class="hint">
+        {p.preset === 'vanilla'
+          ? 'El servidor local iniciará Purpur 26.2 puro sin Slimefun, ideal para un mundo personal tradicional y ligero.'
+          : p.preset === 'slimefun-classic' || p.preset === 'slimefun'
+          ? 'El servidor local inicializa el ecosistema completo de Slimefun v11 y StarSuites.'
+          : 'Gestiona tus plugins individualmente desde la pestaña Plugins.'}
+      </div>
     </div>
   {/if}
+
 
   {#if p.mode !== 'online'}
     <div class="form-grid">
