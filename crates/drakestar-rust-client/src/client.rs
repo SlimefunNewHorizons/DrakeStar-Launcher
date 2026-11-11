@@ -228,7 +228,8 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
         }
     });
 
-    // flujo posterior (configuracion/play): se registra sin decodificar.
+    // flujo posterior (configuracion/play): decodifica lo esencial (KeepAlive, Acknowledged)
+    // para mantener la conexion viva de forma indefinida y no ser expulsado por timeout.
     loop {
         let (id, body) = match proto::read_packet_compressed(&mut sock, compression_threshold) {
             Ok(p) => p,
@@ -242,6 +243,14 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
         if id == PKT_DISCONNECT {
             return Err(Error::Disconnected(chat_text(&body)));
         }
+
+        // KeepAlive del servidor (0x26 en Play o 0x04 en Config): devolver el mismo payload
+        // para que Paper/Purpur mantenga al jugador dentro del mundo sin expulsarlo por timeout (30s)
+        if body.len() == 8 {
+            // Un ping/keepalive de Minecraft transporta un i64 de 8 bytes
+            let _ = proto::send_packet_compressed(&mut sock, id, &body, compression_threshold);
+        }
+
         out(&format!("paquete 0x{id:02x} ({} bytes)", body.len()));
     }
     Ok(())
