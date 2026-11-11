@@ -135,11 +135,14 @@ impl Service {
         if p.mode != Mode::DrakesRust {
             return Err(AppError::Invalid(format!("'{id}' no es un perfil drakes-rust")));
         }
-        launch::rust_client_plan(
+        let settings = self.settings();
+        launch::rust_client_plan_with_auth(
             &p,
             &rustclient::bin_path(&self.layout, id).to_string_lossy(),
             &self.layout.root().to_string_lossy(),
-            &fabric::username(&self.settings(), &p),
+            &fabric::username(&settings, &p),
+            settings.session_uuid.as_deref(),
+            settings.session_token.as_deref(),
         )
         .ok_or_else(|| AppError::Invalid("un perfil drakes-rust necesita 'server' (host o host:puerto)".into()))
     }

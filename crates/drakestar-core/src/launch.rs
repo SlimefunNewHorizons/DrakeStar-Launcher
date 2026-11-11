@@ -51,10 +51,15 @@ pub fn local_server_plan(
     })
 }
 
-/// Plan del cliente Rust (DrakesRust). El binario lo aporta el gestor de releases
-/// (`drakestar-app::rustclient`); aqui solo se arma la linea de comandos.
-/// `None` si el perfil no es drakes-rust o no declara servidor al que conectar.
-pub fn rust_client_plan(p: &Profile, client_bin: &str, root: &str, username: &str) -> Option<LaunchPlan> {
+/// Plan del cliente Rust con credenciales de sesión opcionales.
+pub fn rust_client_plan_with_auth(
+    p: &Profile,
+    client_bin: &str,
+    root: &str,
+    username: &str,
+    uuid: Option<&str>,
+    access_token: Option<&str>,
+) -> Option<LaunchPlan> {
     if p.mode != Mode::DrakesRust {
         return None;
     }
@@ -64,11 +69,25 @@ pub fn rust_client_plan(p: &Profile, client_bin: &str, root: &str, username: &st
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("mc.drakescraft.cl:25565");
+    let mut args = vec!["--server".into(), server.to_string(), "--name".into(), username.to_string()];
+    if let (Some(u), Some(tok)) = (uuid, access_token) {
+        args.push("--uuid".into());
+        args.push(u.to_string());
+        args.push("--token".into());
+        args.push(tok.to_string());
+    }
     Some(LaunchPlan {
         program: client_bin.into(),
-        args: vec!["--server".into(), server.to_string(), "--name".into(), username.to_string()],
+        args,
         cwd: format!("{root}/profiles/{}/instance", p.id),
     })
+}
+
+/// Plan del cliente Rust (DrakesRust). El binario lo aporta el gestor de releases
+/// (`drakestar-app::rustclient`); aqui solo se arma la linea de comandos.
+/// `None` si el perfil no es drakes-rust o no declara servidor al que conectar.
+pub fn rust_client_plan(p: &Profile, client_bin: &str, root: &str, username: &str) -> Option<LaunchPlan> {
+    rust_client_plan_with_auth(p, client_bin, root, username, None, None)
 }
 
 #[cfg(test)]
@@ -136,6 +155,25 @@ mod tests {
         assert_eq!(def_plan.args, vec!["--server", "mc.drakescraft.cl:25565", "--name", "nix"]);
         let def_plan_space = rust_client_plan(&rust_profile(Some(" ")), "x", "/d", "nix").unwrap();
         assert_eq!(def_plan_space.args, vec!["--server", "mc.drakescraft.cl:25565", "--name", "nix"]);
+        // con sesion autenticada (uuid y token)
+        let auth_plan = rust_client_plan_with_auth(
+            &rust_profile(Some("mc.drakescraft.cl")),
+            "/bin/drakestar-rust-client",
+            "/d",
+            "JackStar",
+            Some("12345678-1234-1234-1234-123456789abc"),
+            Some("token_xyz"),
+        )
+        .unwrap();
+        assert_eq!(
+            auth_plan.args,
+            vec![
+                "--server", "mc.drakescraft.cl",
+                "--name", "JackStar",
+                "--uuid", "12345678-1234-1234-1234-123456789abc",
+                "--token", "token_xyz"
+            ]
+        );
         // ni para otros modos
         let mut p = rust_profile(Some("localhost"));
         p.mode = Mode::DrakesJava;

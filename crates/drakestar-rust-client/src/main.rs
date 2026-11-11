@@ -18,6 +18,8 @@ fn usage() {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut cfg = Config::default();
+    let mut given_uuid: Option<String> = None;
+    let mut given_token: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         let flag = args[i].as_str();
@@ -69,6 +71,22 @@ fn main() -> ExitCode {
                 cfg.wants_login = true;
                 i += 1;
             }
+            "--uuid" => {
+                let v = value.unwrap_or_else(|| {
+                    eprintln!("ERROR {flag} necesita un valor");
+                    std::process::exit(2)
+                });
+                given_uuid = Some(v);
+                i += 2;
+            }
+            "--token" => {
+                let v = value.unwrap_or_else(|| {
+                    eprintln!("ERROR {flag} necesita un valor");
+                    std::process::exit(2)
+                });
+                given_token = Some(v);
+                i += 2;
+            }
             other => {
                 eprintln!("ERROR argumento desconocido: {other}");
                 usage();
@@ -82,9 +100,18 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
 
+    if let (Some(u), Some(t)) = (given_uuid, given_token) {
+        cfg.session = Some(auth::Session {
+            uuid: auth::hyphens(&u),
+            name: cfg.name.clone(),
+            access_token: t,
+        });
+    }
+
     // --login: cadena Microsoft -> Xbox -> Minecraft. Bloquea hasta que el
     // usuario autorice en el navegador (o el codigo caduca a los 15 min).
-    if cfg.wants_login {
+    // Si ya vino una sesion valida via --token y --uuid, se reutiliza directamente.
+    if cfg.wants_login && cfg.session.is_none() {
         match auth::authenticate(&mut |l| println!("{l}")) {
             Ok(s) => {
                 cfg.session = Some(s.clone());
