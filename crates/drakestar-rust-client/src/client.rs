@@ -145,9 +145,11 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
     sock.write_all(&hello)?;
     sock.flush()?;
 
+    let mut compression_threshold: i32 = -1;
+
     // fase de login
     loop {
-        let (id, body) = match proto::read_packet(&mut sock) {
+        let (id, body) = match proto::read_packet_compressed(&mut sock, compression_threshold) {
             Ok(p) => p,
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
                 return Err(Error::NoLogin)
@@ -194,11 +196,16 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
                         .map_err(|e| Error::Io(std::io::Error::other(e)))?,
                 );
             }
-            PKT_SET_COMPRESSION => return Err(Error::Compression),
+            PKT_SET_COMPRESSION => {
+                let mut cursor = std::io::Cursor::new(body);
+                let threshold = proto::read_varint(&mut cursor)?;
+                compression_threshold = threshold;
+                out(&format!("compresion zlib activada por el servidor (umbral: {threshold} bytes)"));
+            }
             PKT_DISCONNECT => return Err(Error::Disconnected(chat_text(&body))),
             PKT_LOGIN_SUCCESS => {
                 out(&format!("login correcto ({} bytes de Login Success)", body.len()));
-                proto::send_packet(&mut sock, LOGIN_ACKNOWLEDGED, &[])?;
+                proto::send_packet_compressed(&mut sock, LOGIN_ACKNOWLEDGED, &[], compression_threshold)?;
                 break;
             }
             other => out(&format!("paquete de login ignorado: 0x{other:02x}")),
@@ -223,7 +230,7 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
 
     // flujo posterior (configuracion/play): se registra sin decodificar.
     loop {
-        let (id, body) = match proto::read_packet(&mut sock) {
+        let (id, body) = match proto::read_packet_compressed(&mut sock, compression_threshold) {
             Ok(p) => p,
             // el servidor cerro: es una salida limpia, no un fallo
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
@@ -312,13 +319,36 @@ mod tests {
         });
         assert!(matches!(res, Err(Error::OnlineMode)));
 
-        let (_, res) = collect(&cfg(0), |_r, w| {
-            let mut b = Vec::new();
-            proto::write_varint(&mut b, 256);
-            proto::send_packet(w, PKT_SET_COMPRESSION, &b).unwrap();
+        let (lines, res) = collect(&cfg(0), |r, w| {
+            let (hs, _) = proto::read_packet(r).unwrap(); // handshake
+            assert_eq!(hs, 0x00);
+            let (start, _) = proto::read_packet(r).unwrap(); // login start
+            assert_eq!(start, LOGIN_START);
+
+            // 1) Activar compresión con umbral de 256 bytes
+            let mut comp = Vec::new();
+            proto::write_varint(&mut comp, 256);
+            proto::send_packet(w, PKT_SET_COMPRESSION, &comp).unwrap();
+
+            // 2) Mandar Login Success comprimido
+            let mut login = Vec::new();
+            proto::write_string(&mut login, "login-ok-uuid");
+            proto::write_string(&mut login, "tester");
+            proto::send_packet_compressed(w, PKT_LOGIN_SUCCESS, &login, 256).unwrap();
+
+            // 3) Recibir LOGIN_ACKNOWLEDGED comprimido
+            let (ack, ack_body) = proto::read_packet_compressed(r, 256).unwrap();
+            assert_eq!((ack, ack_body.len()), (LOGIN_ACKNOWLEDGED, 0));
+
+            // 4) Mandar paquete grande (> 256 bytes) comprimido
+            let big = vec![0x33u8; 400];
+            proto::send_packet_compressed(w, 0x42, &big, 256).unwrap();
             w.flush().unwrap();
         });
-        assert!(matches!(res, Err(Error::Compression)));
+        assert!(res.is_ok(), "{res:?}");
+        assert!(lines.iter().any(|l| l.contains("compresion zlib activada")));
+        assert!(lines.iter().any(|l| l.contains("login correcto")));
+        assert!(lines.iter().any(|l| l.contains("0x42") && l.contains("400 bytes")));
     }
 
     #[test]

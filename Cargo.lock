@@ -967,6 +967,7 @@ name = "drakestar-rust-client"
 version = "0.5.1"
 dependencies = [
  "aes 0.9.4",
+ "flate2",
  "hex",
  "rand",
  "rsa",

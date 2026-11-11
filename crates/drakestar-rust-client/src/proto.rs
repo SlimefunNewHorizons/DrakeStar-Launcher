@@ -87,6 +87,48 @@ pub fn write_packet(buf: &mut Vec<u8>, id: i32, body: &[u8]) {
     buf.extend_from_slice(&inner);
 }
 
+/// Escribe un marco comprimido según el umbral `threshold`.
+/// Si `threshold < 0`, se comporta como paquete sin compresión.
+/// Si `threshold >= 0`:
+/// - Si el paquete sin comprimir (`id` + `body`) < threshold: `Data Length = 0` y payload sin comprimir.
+/// - Si el paquete sin comprimir >= threshold: `Data Length = longitud sin comprimir` y payload comprimido con zlib.
+pub fn write_packet_compressed(buf: &mut Vec<u8>, id: i32, body: &[u8], threshold: i32) -> std::io::Result<()> {
+    if threshold < 0 {
+        write_packet(buf, id, body);
+        return Ok(());
+    }
+
+    let uncompressed_len = varint_len(id) + body.len();
+    let mut payload = Vec::with_capacity(uncompressed_len);
+    write_varint(&mut payload, id);
+    payload.extend_from_slice(body);
+
+    if (uncompressed_len as i32) < threshold {
+        // No comprimido: Data Length = 0
+        let mut inner = Vec::with_capacity(varint_len(0) + payload.len());
+        write_varint(&mut inner, 0);
+        inner.extend_from_slice(&payload);
+        write_varint(buf, inner.len() as i32);
+        buf.extend_from_slice(&inner);
+    } else {
+        // Comprimido con zlib
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&payload)?;
+        let compressed_bytes = encoder.finish()?;
+
+        let mut inner = Vec::with_capacity(varint_len(uncompressed_len as i32) + compressed_bytes.len());
+        write_varint(&mut inner, uncompressed_len as i32);
+        inner.extend_from_slice(&compressed_bytes);
+        write_varint(buf, inner.len() as i32);
+        buf.extend_from_slice(&inner);
+    }
+    Ok(())
+}
+
 /// Escribe un marco directo a un escritorio (socket, buffer, ...).
 pub fn send_packet(w: &mut (impl std::io::Write + ?Sized), id: i32, body: &[u8]) -> std::io::Result<()> {
     let mut buf = Vec::new();
@@ -94,10 +136,29 @@ pub fn send_packet(w: &mut (impl std::io::Write + ?Sized), id: i32, body: &[u8])
     w.write_all(&buf)
 }
 
+pub fn send_packet_compressed(
+    w: &mut (impl std::io::Write + ?Sized),
+    id: i32,
+    body: &[u8],
+    threshold: i32,
+) -> std::io::Result<()> {
+    let mut buf = Vec::new();
+    write_packet_compressed(&mut buf, id, body, threshold)?;
+    w.write_all(&buf)
+}
+
 /// Lee un marco. Devuelve `(id, cuerpo)`; el cuerpo es propiedad del llamante.
 /// Si el paquete se pasa de `MAX_PACKET_BYTES` se descarta el flujo: no se puede
 /// seguir sincronizado con un servidor que manda marcos corruptos.
 pub fn read_packet(r: &mut (impl std::io::Read + ?Sized)) -> std::io::Result<(i32, Vec<u8>)> {
+    read_packet_compressed(r, -1)
+}
+
+/// Lee un marco con o sin compresión activa (`threshold >= 0`).
+pub fn read_packet_compressed(
+    r: &mut (impl std::io::Read + ?Sized),
+    threshold: i32,
+) -> std::io::Result<(i32, Vec<u8>)> {
     let len = read_varint(r)?;
     if len < 0 || len as usize > MAX_PACKET_BYTES {
         return Err(std::io::Error::new(
@@ -107,11 +168,51 @@ pub fn read_packet(r: &mut (impl std::io::Read + ?Sized)) -> std::io::Result<(i3
     }
     let mut frame = vec![0u8; len as usize];
     r.read_exact(&mut frame)?;
-    let mut body = std::io::Cursor::new(frame);
-    let id = read_varint(&mut body)?;
-    let pos = body.position() as usize;
-    let payload = body.into_inner().split_off(pos);
-    Ok((id, payload))}
+
+    if threshold < 0 {
+        let mut body = std::io::Cursor::new(frame);
+        let id = read_varint(&mut body)?;
+        let pos = body.position() as usize;
+        let payload = body.into_inner().split_off(pos);
+        return Ok((id, payload));
+    }
+
+    // Modo comprimido activo
+    let mut cursor = std::io::Cursor::new(frame);
+    let data_len = read_varint(&mut cursor)?;
+    let pos = cursor.position() as usize;
+    let raw = cursor.into_inner().split_off(pos);
+
+    if data_len == 0 {
+        // Paquete no comprimido (menor que el threshold)
+        let mut body = std::io::Cursor::new(raw);
+        let id = read_varint(&mut body)?;
+        let p = body.position() as usize;
+        let payload = body.into_inner().split_off(p);
+        Ok((id, payload))
+    } else {
+        // Paquete comprimido con Zlib
+        use flate2::read::ZlibDecoder;
+        use std::io::Read;
+
+        if data_len < 0 || (data_len as usize) > MAX_PACKET_BYTES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("data_len descomprimido invalido: {data_len}"),
+            ));
+        }
+
+        let mut decoder = ZlibDecoder::new(&raw[..]);
+        let mut decompressed = Vec::with_capacity(data_len as usize);
+        decoder.read_to_end(&mut decompressed)?;
+
+        let mut body = std::io::Cursor::new(decompressed);
+        let id = read_varint(&mut body)?;
+        let p = body.position() as usize;
+        let payload = body.into_inner().split_off(p);
+        Ok((id, payload))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -178,5 +279,26 @@ mod tests {
         let mut bad = std::io::Cursor::new(vec![0xff, 0xff, 0xff, 0xff, 0x07]);
         assert!(read_packet(&mut bad).is_err());
         assert!(read_packet(&mut std::io::Cursor::new(vec![0x05, 0x2a])).is_err());
+    }
+
+    #[test]
+    fn compressed_packet_roundtrips_above_and_below_threshold() {
+        // 1) Pequeño (< threshold 256): no se comprime (Data Length = 0)
+        let mut buf_small = Vec::new();
+        write_packet_compressed(&mut buf_small, 0x05, b"hello", 256).unwrap();
+        let (id, body) = read_packet_compressed(&mut std::io::Cursor::new(buf_small), 256).unwrap();
+        assert_eq!(id, 0x05);
+        assert_eq!(body, b"hello");
+
+        // 2) Grande (>= threshold 256): se comprime con zlib
+        let big_payload = vec![0x42u8; 500];
+        let mut buf_big = Vec::new();
+        write_packet_compressed(&mut buf_big, 0x07, &big_payload, 256).unwrap();
+        // El frame comprimido debe ser sustancialmente menor a 500 bytes
+        assert!(buf_big.len() < 100);
+
+        let (id_big, body_big) = read_packet_compressed(&mut std::io::Cursor::new(buf_big), 256).unwrap();
+        assert_eq!(id_big, 0x07);
+        assert_eq!(body_big, big_payload);
     }
 }

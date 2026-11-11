@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 aes = "0.9.4"
+flate2 = "1.0"
 hex = "0.4.3"
 rand = "0.10.3"
 rsa = { version = "0.10.0", features = ["pkcs1v15"] }
