@@ -22,6 +22,7 @@
   import CrashReporterModal from './components/CrashReporterModal.svelte';
 
   let fatal = $state<string | null>(null);
+  let sidebarOpen = $state(false);
   onMount(() => { app.init().catch((e) => (fatal = e instanceof Error ? e.message : String(e))); });
 
   const views: Record<string, Component<any>> = {
@@ -70,18 +71,37 @@
       <span class="kernel">PURPUR 26.2 × RUST FFM ENGINE</span>
     </div>
     <header class="topbar">
-      <a class="brand" href="#/" aria-label="DrakeStar, inicio"><img src={brand.logo} alt="DrakeStar" /></a>
+      <button
+        type="button"
+        class="btn icon-btn mobile-menu-toggle"
+        onclick={() => { sound.click(); sidebarOpen = !sidebarOpen; }}
+        aria-label="Alternar menú lateral"
+        aria-expanded={sidebarOpen}
+      >
+        <span style="font-size:1.15rem; line-height:1;">{sidebarOpen ? '✕' : '☰'}</span>
+      </button>
+      <a class="brand" href="#/" aria-label="DrakeStar, inicio" onclick={() => (sidebarOpen = false)}>
+        <img src={brand.logo} alt="DrakeStar" />
+      </a>
       <div role="group" aria-label="Selector de modo" class="tabs">
         {#each modes as m (m)}
-          <button onclick={() => { sound.click(); pickMode(m); }} onmouseenter={() => sound.hover()} aria-pressed={active?.mode === m} aria-label={modeLabel[m]}><img src={brand.tab(m, active?.mode === m)} alt={modeLabel[m]} /></button>
+          <button onclick={() => { sound.click(); pickMode(m); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-pressed={active?.mode === m} aria-label={modeLabel[m]}><img src={brand.tab(m, active?.mode === m)} alt={modeLabel[m]} /></button>
         {/each}
       </div>
     </header>
     <div class="body">
-      <aside class="sidebar">
+      {#if sidebarOpen}
+        <button
+          type="button"
+          class="sidebar-backdrop"
+          onclick={() => (sidebarOpen = false)}
+          aria-label="Cerrar menú lateral"
+        ></button>
+      {/if}
+      <aside class="sidebar" class:open={sidebarOpen}>
         <div class="field" style="margin:0">
           <label for="active-profile">Perfil activo</label>
-          <select id="active-profile" value={app.settings.active_profile ?? ''} onchange={(e) => { sound.click(); onSelect(e); }}>
+          <select id="active-profile" value={app.settings.active_profile ?? ''} onchange={(e) => { sound.click(); onSelect(e); sidebarOpen = false; }}>
             {#if !app.profiles.length}<option value="">(sin perfiles)</option>{/if}
             {#each app.profiles as p (p.id)}<option value={p.id}>{p.name} · {p.channel}</option>{/each}
           </select>
@@ -89,20 +109,20 @@
         <nav aria-label="Navegación principal">
           <h3>General</h3>
           {#each general as r (r.path)}
-            <a class="navlink" href={`#${r.path}`} onclick={() => sound.click()} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.isotype} alt="" />{r.title}</a>
+            <a class="navlink" href={`#${r.path}`} onclick={() => { sound.click(); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.isotype} alt="" />{r.title}</a>
           {/each}
           {#if active}
             <h3>{modeLabel[active.mode]}</h3>
             {#each modeRoutes as r (r.path)}
-              <a class="navlink" class:sub={r.path.split('/').length > 2} href={`#${r.path}`} onclick={() => sound.click()} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.modeIcon(active.mode)} alt="" />{r.title}</a>
+              <a class="navlink" class:sub={r.path.split('/').length > 2} href={`#${r.path}`} onclick={() => { sound.click(); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.modeIcon(active.mode)} alt="" />{r.title}</a>
             {/each}
           {/if}
           <h3>Ajustes</h3>
           {#each settingsRoutes as r (r.path)}
-            <a class="navlink" href={`#${r.path}`} onclick={() => sound.click()} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.icon('settings')} alt="" />{r.title}</a>
+            <a class="navlink" href={`#${r.path}`} onclick={() => { sound.click(); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-current={router.path === r.path ? 'page' : undefined}><img src={icons[r.path] ?? brand.icon('settings')} alt="" />{r.title}</a>
           {/each}
           <h3>Comunidad</h3>
-          <a class="navlink" href={brand.discordUrl} target="_blank" rel="noopener noreferrer" onclick={() => sound.click()} onmouseenter={() => sound.hover()} title="Unirse al Discord oficial de DrakesCraft">
+          <a class="navlink" href={brand.discordUrl} target="_blank" rel="noopener noreferrer" onclick={() => { sound.click(); sidebarOpen = false; }} onmouseenter={() => sound.hover()} title="Unirse al Discord oficial de DrakesCraft">
             <img src={brand.icon('discord')} alt="Discord" />
             Discord Oficial
           </a>

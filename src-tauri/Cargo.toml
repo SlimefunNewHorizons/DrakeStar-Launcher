@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 # en release y falla con "Connection refused". Solo tiene sentido en release:
 # en dev el CLI de Tauri la activa el solo.
 [features]
+default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
