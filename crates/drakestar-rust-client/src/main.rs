@@ -1,12 +1,16 @@
 //! Binario del cliente Rust de DrakeStar. Lo lanza el launcher con
 //! `--server <host[:puerto]> --name <usuario>`; tambien se puede usar a mano.
+//!
+//! `--login` abre el flujo de cuenta de Microsoft (device code), necesario para
+//! entrar a servidores con `online-mode=true`.
 
-use drakestar_rust_client::client::{self, Config, Error};
+use drakestar_rust_client::{auth, client::{self, Config, Error}};
 use std::process::ExitCode;
 
 fn usage() {
     eprintln!(
-        "drakestar-rust-client --server <host[:puerto]> [--name <usuario>] [--protocol <n>]\n  \
+        "drakestar-rust-client --server <host[:puerto]> [--name <usuario>] [--protocol <n>] [--login]\n  \
+         --login  pide cuenta de Microsoft (necesario en online-mode=true)\n  \
          consola: escribe 'quit' (o 'stop') para salir"
     );
 }
@@ -61,6 +65,10 @@ fn main() -> ExitCode {
                 usage();
                 return ExitCode::SUCCESS;
             }
+            "--login" => {
+                cfg.wants_login = true;
+                i += 1;
+            }
             other => {
                 eprintln!("ERROR argumento desconocido: {other}");
                 usage();
@@ -73,6 +81,23 @@ fn main() -> ExitCode {
         usage();
         return ExitCode::from(2);
     }
+
+    // --login: cadena Microsoft -> Xbox -> Minecraft. Bloquea hasta que el
+    // usuario autorice en el navegador (o el codigo caduca a los 15 min).
+    if cfg.wants_login {
+        match auth::authenticate(&mut |l| println!("{l}")) {
+            Ok(s) => {
+                cfg.session = Some(s.clone());
+                // el nombre sale del perfil de Minecraft, no del que se haya pasado
+                cfg.name = s.name;
+            }
+            Err(e) => {
+                eprintln!("ERROR login: {e}");
+                return ExitCode::from(3);
+            }
+        }
+    }
+
     match client::run(&cfg, &mut |l| println!("{l}")) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

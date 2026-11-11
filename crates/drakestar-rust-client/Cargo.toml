@@ -14,4 +14,10 @@ name = "drakestar-rust-client"
 path = "src/main.rs"
 
 [dependencies]
+aes = "0.9.4"
+hex = "0.4.3"
+rand = "0.10.3"
+rsa = { version = "0.10.0", features = ["pkcs1v15"] }
 serde_json.workspace = true
+sha1 = "0.10"
+ureq = { version = "2", features = ["json"] }
