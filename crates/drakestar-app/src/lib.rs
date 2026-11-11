@@ -3,6 +3,7 @@
 //! directorio del servidor local, resolucion/descarga de releases y delta-sync de mods.
 //! El crate `src-tauri` solo expone estas funciones como comandos IPC.
 
+pub mod assets;
 pub mod compat_report;
 pub mod engine;
 pub mod error;

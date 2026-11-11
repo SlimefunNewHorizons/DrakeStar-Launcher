@@ -6,7 +6,7 @@
     show = $bindable(false),
     title = 'Error en ejecución',
     errorLog = '',
-    component = 'IntegratedServer / Slimefun'
+    component = 'Minecraft / IntegratedServer'
   }: {
     show?: boolean;
     title?: string;
@@ -15,24 +15,29 @@
   } = $props();
 
   function openGithubReport() {
-    const repoUrl = 'https://github.com/SlimefunNewHorizons/drakestar-fused/issues/new';
+    const repoUrl = 'https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/issues/new';
     const issueTitle = `[Bug / Crash Report] ${title}`;
+    const version = app.info?.version ? `v${app.info.version}` : 'v0.5.1';
     
-    // Recortar log si excede los 2500 caracteres para URLs seguras
-    const safeLog = errorLog.length > 2500 ? errorLog.slice(-2500) : errorLog;
+    // Recortar log a ~900 caracteres para no exceder los límites de longitud de URL en HTTP/Nginx/GitHub
+    const safeLog = errorLog.length > 900 ? errorLog.slice(-900) : errorLog;
     
     const body = `### 🚨 Reporte Automático de Error\n\n` +
       `**Componente:** \`${component}\`\n` +
-      `**Versión Launcher:** \`v0.5.0\`\n` +
+      `**Versión Launcher:** \`${version}\`\n` +
       `**Fecha:** \`${new Date().toISOString()}\`\n\n` +
-      `#### 📜 Log de Error Registrado\n\`\`\`text\n${safeLog || 'No se registraron logs específicos.'}\n\`\`\`\n\n` +
-      `#### ℹ️ Pasos para reproducir\n1. Abrir DrakeStar Launcher\n2. Ejecutar instancia\n3. [Describir lo que estabas haciendo]\n\n` +
-      `*(Generado automáticamente por DrakeStar Telemetry & SRE)*`;
+      `#### 📜 Log de Error (Últimas líneas)\n\`\`\`text\n${safeLog || 'No se registraron logs específicos.'}\n\`\`\`\n\n` +
+      `*(Copiado automáticamente por DrakeStar Telemetry & SRE)*`;
 
-    const fullUrl = `${repoUrl}?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(body)}&labels=crash-report,community-report`;
+    // Copiar el log íntegro y sin recortar al portapapeles del usuario por conveniencia
+    try {
+      navigator.clipboard.writeText(errorLog);
+    } catch (_) {}
+
+    const fullUrl = `${repoUrl}?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(body)}`;
     window.open(fullUrl, '_blank', 'noopener,noreferrer');
     show = false;
-    app.notify('ok', '📋 Formulario de reporte abierto en GitHub. ¡Gracias por reportar!');
+    app.notify('ok', '📋 Formulario de reporte abierto en GitHub. Log copiado al portapapeles.');
   }
 
   function copyLogToClipboard() {
@@ -41,15 +46,24 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && show) show = false; }} />
+
 {#if show}
-  <div class="modal-backdrop" onclick={() => (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)} role="button" tabindex="0" aria-label="Cerrar modal">
-    <div class="modal-card card stack" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+  <div class="modal-backdrop" role="presentation">
+    <button type="button" class="backdrop-dismiss" onclick={() => (show = false)} aria-label="Cerrar modal"></button>
+    <div
+      class="modal-card card stack"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="crash-modal-title"
+      tabindex="-1"
+    >
       <header class="row between items-center">
         <div class="row items-center gap-sm">
-          <span style="font-size:1.5rem">💥</span>
-          <h2 style="margin:0; color:#ef4444; font-size:1.1rem;">REPORTE DE ERROR / CRASH</h2>
+          <span style="font-size:1.5rem" aria-hidden="true">💥</span>
+          <h2 id="crash-modal-title" style="margin:0; color:#ef4444; font-size:1.1rem;">REPORTE DE ERROR / CRASH</h2>
         </div>
-        <button class="btn icon-btn" onclick={() => (show = false)}>✕</button>
+        <button class="btn icon-btn" onclick={() => (show = false)} aria-label="Cerrar modal">✕</button>
       </header>
 
       <p class="muted" style="font-size:0.85rem; margin:0.25rem 0;">
@@ -90,7 +104,20 @@
     padding: 1rem;
   }
 
+  .backdrop-dismiss {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    cursor: default;
+    z-index: 1;
+  }
+
   .modal-card {
+    position: relative;
+    z-index: 2;
     max-width: 620px;
     width: 100%;
     background: #0d1117;

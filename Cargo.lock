@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "drakestar-app"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "drakestar-core",
  "drakestar-net",
@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "drakestar-app-tauri"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "drakestar-app",
  "drakestar-core",
@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "drakestar-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "drakestar-core",
  "serde_json",
@@ -837,7 +837,7 @@ dependencies = [
 
 [[package]]
 name = "drakestar-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -845,11 +845,11 @@ dependencies = [
 
 [[package]]
 name = "drakestar-native-example"
-version = "0.5.0"
+version = "0.5.1"
 
 [[package]]
 name = "drakestar-net"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.1",
@@ -858,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "drakestar-rust-client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde_json",
 ]

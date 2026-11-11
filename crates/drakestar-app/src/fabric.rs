@@ -345,6 +345,13 @@ pub fn install(l: &Layout, p: &Profile) -> AppResult<ClientStatus> {
     if !failed.is_empty() {
         return Err(AppError::Net(format!("no se pudieron verificar {} artefactos: {}", failed.len(), failed.join("; "))));
     }
+    // Asegura el índice de assets oficial (sonidos/idiomas) para evitar cliente mudo o fallo de index
+    if let Some(ai) = &version.asset_index {
+        let assets_dir = resolve_assets_dir_for_version(&dir, Some(&ai.id));
+        if let Ok(idx_path) = crate::assets::ensure_asset_index(&assets_dir, ai) {
+            let _ = crate::assets::sync_essential_assets(&assets_dir, &idx_path);
+        }
+    }
     let mut st = status_from(&version, &r.fabric, &planned);
     st.profile = p.id.clone();
     st.reason = Some(format!(
@@ -426,21 +433,15 @@ pub fn classpath(l: &Layout, p: &Profile) -> AppResult<String> {
     Ok(planned.iter().map(|a| a.dest.to_string_lossy().to_string()).collect::<Vec<_>>().join(sep))
 }
 
-/// Resuelve el directorio de assets con prioridad a cachés existentes (Prism/Vanilla)
-/// para evitar descargas innecesarias y permitir audio inmediato desde el primer inicio.
+/// Resuelve el directorio de assets usando el módulo soberano multiplataforma.
+/// Se delega a `crate::assets::resolve_assets_dir` garantizando verificación de índices
+/// y compatibilidad con Windows, macOS, Linux XDG y Flatpak.
 pub fn resolve_assets_dir(inst: &Path) -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        let home_path = PathBuf::from(home);
-        let prism_assets = home_path.join(".local/share/PrismLauncher/assets");
-        if prism_assets.join("objects").is_dir() {
-            return prism_assets;
-        }
-        let vanilla_assets = home_path.join(".minecraft/assets");
-        if vanilla_assets.join("objects").is_dir() {
-            return vanilla_assets;
-        }
-    }
-    inst.join("assets")
+    crate::assets::resolve_assets_dir(inst, None)
+}
+
+pub fn resolve_assets_dir_for_version(inst: &Path, index_id: Option<&str>) -> PathBuf {
+    crate::assets::resolve_assets_dir(inst, index_id)
 }
 
 /// Plan de lanzamiento del cliente (sin ejecutar).
@@ -448,7 +449,8 @@ pub fn plan(l: &Layout, p: &Profile, java_bin: &str, username: &str) -> AppResul
     let (version, cache) = cached(l, &p.id).ok_or_else(|| AppError::NotFound("cliente no instalado".into()))?;
     let inst = instance_dir(l, &p.id);
     let cp = classpath(l, p)?;
-    let assets_dir = resolve_assets_dir(&inst);
+    let index_id = version.asset_index.as_ref().map(|a| a.id.as_str());
+    let assets_dir = resolve_assets_dir_for_version(&inst, index_id);
     fabric::client_plan(
         p,
         &version,

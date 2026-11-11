@@ -19,6 +19,7 @@
   import Online from './views/Online.svelte';
   import Updates from './views/Updates.svelte';
   import About from './views/About.svelte';
+  import CrashReporterModal from './components/CrashReporterModal.svelte';
 
   let fatal = $state<string | null>(null);
   onMount(() => { app.init().catch((e) => (fatal = e instanceof Error ? e.message : String(e))); });
@@ -62,7 +63,7 @@
   {:else}
     <div class="cyber-header-bar" role="status">
       <span class="live-dot"></span>
-      <span class="title">DRAKESTAR DECK v0.4.0</span>
+      <span class="title">DRAKESTAR DECK v{app.info?.version ?? '0.5.1'}</span>
       <span class="divider">::</span>
       <span class="target">ONLINE SMP · mc.drakescraft.cl:25565 (T2)</span>
       <span class="divider">::</span>
@@ -125,4 +126,10 @@
   {#if app.toast}
     <div class="toast {app.toast.kind}" role={app.toast.kind === 'err' ? 'alert' : 'status'}>{app.toast.text}</div>
   {/if}
+  <CrashReporterModal
+    bind:show={app.crashReport.show}
+    title={app.crashReport.title}
+    errorLog={app.crashReport.errorLog}
+    component={app.crashReport.component}
+  />
 </div>

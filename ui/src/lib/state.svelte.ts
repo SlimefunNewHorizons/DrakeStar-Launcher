@@ -16,6 +16,17 @@ class AppState {
   consoles = $state<Record<string, LineRec[]>>({});
   toast = $state<Toast | null>(null);
   ready = $state(false);
+  crashReport = $state<{
+    show: boolean;
+    title: string;
+    errorLog: string;
+    component: string;
+  }>({
+    show: false,
+    title: '',
+    errorLog: '',
+    component: ''
+  });
   private toastTimer: number | undefined;
 
   get active(): Profile | null {
@@ -33,6 +44,19 @@ class AppState {
     clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => (this.toast = null), kind === 'err' ? 9000 : 4000);
   }
+
+  reportCrash(profile: string, title?: string, reason?: string) {
+    const lines = this.consoles[profile] ?? [];
+    const tail = lines.slice(-40).map((l) => `[${l.stream}] ${l.line}`).join('\n');
+    const p = this.profiles.find((x) => x.id === profile);
+    this.crashReport = {
+      show: true,
+      title: title || `Falla inesperada en perfil ${p?.name || profile}`,
+      errorLog: tail || reason || 'No se registraron logs específicos en el búfer.',
+      component: p?.mode ? `DrakeStar Mode: ${p.mode}` : 'Minecraft / IntegratedServer'
+    };
+  }
+
   async guard<T>(fn: () => Promise<T>, okText?: string): Promise<T | undefined> {
     try {
       const r = await fn();
@@ -54,7 +78,13 @@ class AppState {
         q.push({ ts: e.ts, stream: e.stream, line: e.line });
         if (q.length > CAP) q.splice(0, q.length - CAP);
       } else {
-        this.status[e.profile] = { ...this.statusOf(e.profile), state: e.state, exit_code: e.code ?? this.statusOf(e.profile).exit_code };
+        const prev = this.statusOf(e.profile);
+        const exitCode = e.code ?? prev.exit_code;
+        this.status[e.profile] = { ...prev, state: e.state, exit_code: exitCode };
+        // Si el proceso termina con error inesperado (no parada normal código 0, SIGINT 130 o SIGTERM 143)
+        if (e.state === 'crashed' || (e.state === 'stopped' && exitCode !== null && exitCode !== 0 && exitCode !== 130 && exitCode !== 143)) {
+          this.reportCrash(e.profile, `Proceso detenido inesperadamente (código ${exitCode})`);
+        }
       }
     });
     this.ready = true;
