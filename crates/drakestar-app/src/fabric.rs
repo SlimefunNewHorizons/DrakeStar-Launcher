@@ -464,6 +464,9 @@ pub fn plan(l: &Layout, p: &Profile, java_bin: &str, username: &str) -> AppResul
             version_label: &format!("fabric-loader-{}-{}", cache.entry.loader.version, p.minecraft),
             launcher_name: "DrakeStar",
             launcher_version: env!("CARGO_PKG_VERSION"),
+            uuid: None,
+            access_token: None,
+            user_type: None,
         },
     )
     .ok_or_else(|| AppError::Invalid("este perfil no lanza un cliente Fabric".into()))

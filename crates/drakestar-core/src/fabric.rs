@@ -294,6 +294,12 @@ pub struct ClientLaunch<'a> {
     pub version_label: &'a str,
     pub launcher_name: &'a str,
     pub launcher_version: &'a str,
+    /// UUID con guiones o en formato Mojang (si hay sesión online).
+    pub uuid: Option<&'a str>,
+    /// Access token oficial de Minecraft (si hay sesión online).
+    pub access_token: Option<&'a str>,
+    /// Tipo de usuario: "msa" (Microsoft) o "mojang".
+    pub user_type: Option<&'a str>,
 }
 
 /// Plan de un cliente Fabric: los argumentos de JVM y de juego del manifiesto de
@@ -303,6 +309,13 @@ pub fn client_plan(p: &Profile, v: &VersionInfo, c: &ClientLaunch) -> Option<Cli
     if p.mode != Mode::DrakesJava || p.loader != Loader::Fabric {
         return None;
     }
+    let default_uuid = OFFLINE_UUID.to_string();
+    let auth_uuid = c.uuid.unwrap_or(&default_uuid);
+    let default_token = "0";
+    let auth_token = c.access_token.unwrap_or(default_token);
+    let default_user_type = "msa";
+    let auth_user_type = c.user_type.unwrap_or(default_user_type);
+
     let vars = |key: &str| -> Option<String> {
         Some(match key {
             "natives_directory" => c.natives_dir.to_string(),
@@ -314,8 +327,9 @@ pub fn client_plan(p: &Profile, v: &VersionInfo, c: &ClientLaunch) -> Option<Cli
             "game_directory" => c.game_dir.to_string(),
             "assets_root" => c.assets_dir.to_string(),
             "assets_index_name" => v.asset_index.as_ref().map(|a| a.id.clone())?,
-            "auth_uuid" => OFFLINE_UUID.to_string(),
-            "auth_access_token" => "0".to_string(),
+            "auth_uuid" => auth_uuid.to_string(),
+            "auth_access_token" => auth_token.to_string(),
+            "user_type" => auth_user_type.to_string(),
             "clientid" => String::new(),
             "auth_xuid" => String::new(),
             "version_type" => "release".to_string(),
@@ -470,6 +484,9 @@ mod tests {
             version_label: "fabric-loader-0.20.1-26.2",
             launcher_name: "DrakeStar",
             launcher_version: "0.1.0",
+            uuid: None,
+            access_token: None,
+            user_type: None,
         };
         let plan = client_plan(&p, &v, &l).unwrap();
         assert_eq!(plan.cwd, "/d/inst");
