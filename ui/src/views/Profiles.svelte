@@ -131,6 +131,18 @@
       <dl class="kv">
         <dt>Modo</dt><dd>{modeLabel[p.mode]}</dd>
         <dt>Minecraft</dt><dd>{p.minecraft}{p.loader !== 'vanilla' ? ` · ${p.loader}` : ''}</dd>
+        <dt>Gráficos</dt>
+        <dd>
+          <span class="badge" class:yes={p.graphics?.backend === 'vulkan'} class:neutral={p.graphics?.backend !== 'vulkan'}>
+            {p.graphics?.backend === 'vulkan' ? '⚡ Vulkan' : '🟢 OpenGL'}
+          </span>
+          {#if p.graphics?.width && p.graphics?.height}
+            <span class="badge neutral" style="font-size:0.75rem">{p.graphics.width}×{p.graphics.height}{p.graphics.fullscreen ? ' ⛶' : ''}</span>
+          {/if}
+          {#if p.graphics?.discrete_gpu}
+            <span class="badge yes" style="font-size:0.75rem" title="Render offload en GPU dedicada">dGPU</span>
+          {/if}
+        </dd>
         {#if p.server}<dt>Servidor</dt><dd>{p.server}</dd>{/if}
         {#if p.preset}<dt>Preset</dt><dd>{p.preset}</dd>{/if}
       </dl>
