@@ -25,7 +25,7 @@
 </script>
 
 <h1>Actualizaciones</h1>
-<div class="alert warn">Honestidad: no hay todavía un manifiesto oficial publicado ni firma de manifiestos; el <code>examples/manifest.example.json</code> es solo de ejemplo (URL <code>example.invalid</code>, SHA-256 de ceros). La resolución usa <code>Manifest::resolve</code> y respeta el canal del perfil. <strong>Rollback: pendiente.</strong></div>
+<div class="alert info">Manifiesto integrado oficial (<code>manifest.json</code>) con releases firmadas por SHA-256 para <strong>DrakesPurpur 26.2.140</strong> y <strong>DrakesRust Client</strong>. La resolución utiliza <code>Manifest::resolve</code> y respeta el canal (stable / unstable / nightly) y la versión de Minecraft de cada perfil.</div>
 
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
   <section class="card stack" aria-labelledby="u-imp">
