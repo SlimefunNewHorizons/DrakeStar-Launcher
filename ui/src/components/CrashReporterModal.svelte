@@ -17,7 +17,7 @@
   function openGithubReport() {
     const repoUrl = 'https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/issues/new';
     const issueTitle = `[Bug / Crash Report] ${title}`;
-    const version = app.info?.version ? `v${app.info.version}` : 'v0.5.1';
+    const version = app.info?.version ? `v${app.info.version}` : 'v0.5.2';
     
     // Recortar log a ~900 caracteres para no exceder los límites de longitud de URL en HTTP/Nginx/GitHub
     const safeLog = errorLog.length > 900 ? errorLog.slice(-900) : errorLog;

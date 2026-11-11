@@ -20,6 +20,17 @@
 - **Telemetría y Estado Online**: Ping TCP nativo y protocolo Minecraft Server List Ping (`mc_status_ping`, SLP `0x00`) con latencia, conteo de jugadores en vivo y MOTD sin códigos de formato `§`.
 - **Importador de Instancias Prism**: Detección y migración automática de instancias locales de Prism Launcher con transferencia de configuraciones, mods y hashes.
 
+**v0.5.2 — Puente Fused Multi-Loader, Selector de Presets Personal y Respaldo de Mundos (completado):**
+- **Puente Multi-Loader `drakestar-fused` (Fabric / NeoForge / Forge 1.21.1)**:
+  - Integración del mod híbrido en el pipeline del launcher con soporte de ciclo de vida completo (`FusedLifecycleListener`), compatibilidad binaria Bukkit/Spigot/Paper en singleplayer (`FusedCraftServer`, `FusedPluginLoader`, `FusedCrashHandler`), y resolución nativa dinámica de `Slimefun-Rust` FFI (`libdrakes_hybrid_ffi`).
+  - Pipeline de compilación y empaquetado multi-loader sin Gradle pesado en release (`build_all_loaders.sh`), generando artefactos listos para producción para Fabric, NeoForge y Forge.
+- **Selector de Presets Personal (Requerimiento Chagui)**:
+  - Selector interactivo en UI (`ProfileEditor.svelte`) para elegir entre mundo local con `Slimefun Classic` o `Vanilla Puro (Sin plugins)`, permitiendo a desarrolladores y jugadores correr entornos locales de pruebas ultralivianos o mundos técnicos vanilla.
+- **Respaldo Instantáneo de Mundos**:
+  - Acción interactiva en `ui/src/views/Worlds.svelte` conectada vía Tauri IPC a `backupWorld`, permitiendo crear copias de seguridad de mundos Purpur 26.2 antes de cambios de versiones o adición de plugins.
+- **Modernización y Pulido de UI**:
+  - Erradicación de notas de versión pendientes obsoletas en vista Java (`🎮 Lanzar Minecraft` directo), modal de reporte de errores integrado con telemetría v0.5.2 y navegación optimizada.
+
 **v0.6 — Actualizaciones & Releases:** manifiestos firmados, canales por componente, rollback. *Hoy: resolución por canal desde un manifiesto importado y catálogo Modrinth integrado.*
 
 **v1.0 — DrakesRust:** conexión nativa a DrakesPurpur 26.2 demostrada con KeepAlive automático, compresión de paquetes Zlib y apertura de GUIs de Slimefun.
