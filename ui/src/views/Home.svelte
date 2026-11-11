@@ -142,6 +142,13 @@
           max_mem_mb: 4096,
           extra_jvm_args: ['-XX:+UseG1GC'],
         },
+        graphics: {
+          backend: 'opengl',
+          width: 1280,
+          height: 720,
+          fullscreen: false,
+          discrete_gpu: true,
+        },
         server: 'mc.drakescraft.cl:25565',
         preset: null,
         modpack: null,
