@@ -3,7 +3,7 @@
   import { app } from '../lib/state.svelte';
   import { brand, modeLabel } from '../lib/brand';
   import { slug } from '../lib/format';
-  import type { Channel, Loader, Mode, Profile } from '../lib/types';
+  import type { Channel, Loader, Mode, Profile, GraphicsBackend } from '../lib/types';
   import CompatTable from '../components/CompatTable.svelte';
 
   let { initial, creating, onsaved, oncancel }: {
@@ -16,6 +16,16 @@
   let jvmArgs = $state(initial.java.extra_jvm_args.join(' '));
   // svelte-ignore state_referenced_locally
   let idTouched = $state(!creating);
+  // svelte-ignore state_referenced_locally
+  let graphicsBackend = $state<GraphicsBackend>(initial.graphics?.backend ?? 'opengl');
+  // svelte-ignore state_referenced_locally
+  let graphicsWidth = $state<number | null>(initial.graphics?.width ?? 1280);
+  // svelte-ignore state_referenced_locally
+  let graphicsHeight = $state<number | null>(initial.graphics?.height ?? 720);
+  // svelte-ignore state_referenced_locally
+  let graphicsFullscreen = $state<boolean>(initial.graphics?.fullscreen ?? false);
+  // svelte-ignore state_referenced_locally
+  let graphicsDiscreteGpu = $state<boolean>(initial.graphics?.discrete_gpu ?? true);
   let serverError = $state<string | null>(null);
   let saving = $state(false);
 
@@ -45,6 +55,13 @@
     q.server = q.server?.trim() ? q.server.trim() : null;
     q.modpack = q.modpack?.trim() ? q.modpack.trim() : null;
     q.preset = q.preset?.trim() ? q.preset.trim() : null;
+    q.graphics = {
+      backend: graphicsBackend,
+      width: graphicsWidth ? Number(graphicsWidth) : 1280,
+      height: graphicsHeight ? Number(graphicsHeight) : 720,
+      fullscreen: graphicsFullscreen,
+      discrete_gpu: graphicsDiscreteGpu,
+    };
     return q;
   }
   // Validacion en vivo con drakestar-core (comando validate_profile).
@@ -158,6 +175,39 @@
       <div class="field"><label for="pf-jv">Java (major, vacío = deducir)</label><input id="pf-jv" type="number" min="8" bind:value={p.java.major} /></div>
     </div>
     <div class="field"><label for="pf-args">Argumentos JVM extra</label><input id="pf-args" bind:value={jvmArgs} placeholder="-XX:+UseZGC" /></div>
+  {/if}
+
+  {#if p.mode === 'drakes-java' || p.mode === 'drakes-rust'}
+    <fieldset style="border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 0.75rem 1rem; margin-top: 0.5rem; background: rgba(0,0,0,0.2);">
+      <legend style="padding: 0 0.5rem; font-weight: 600; color: var(--gold-2, #f59e0b);">🎮 Gráficos & Pantalla (OpenGL / Vulkan)</legend>
+      <div class="form-grid">
+        <div class="field">
+          <label for="pf-gfx-backend">Pipeline de Renderizado</label>
+          <select id="pf-gfx-backend" bind:value={graphicsBackend}>
+            <option value="opengl">OpenGL (Estándar / Sodium / Iris Shaders)</option>
+            <option value="vulkan">Vulkan (VulkanMod / Zero Overhead)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pf-gfx-w">Resolución de Ventana</label>
+          <div class="row" style="gap: 0.5rem; align-items: center;">
+            <input id="pf-gfx-w" type="number" min="640" step="40" placeholder="1280" bind:value={graphicsWidth} style="width: 45%;" />
+            <span>×</span>
+            <input id="pf-gfx-h" type="number" min="480" step="40" placeholder="720" bind:value={graphicsHeight} style="width: 45%;" />
+          </div>
+        </div>
+      </div>
+      <div class="row" style="gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+        <label class="row" style="gap: 0.4rem; cursor: pointer; align-items: center;">
+          <input type="checkbox" bind:checked={graphicsFullscreen} />
+          <span>Pantalla completa (Fullscreen)</span>
+        </label>
+        <label class="row" style="gap: 0.4rem; cursor: pointer; align-items: center;">
+          <input type="checkbox" bind:checked={graphicsDiscreteGpu} />
+          <span>Forzar GPU dedicada (PRIME / NVIDIA)</span>
+        </label>
+      </div>
+    </fieldset>
   {/if}
 
   <div class="field"><label for="pf-notes">Notas</label><textarea id="pf-notes" rows="2" bind:value={p.notes}></textarea></div>

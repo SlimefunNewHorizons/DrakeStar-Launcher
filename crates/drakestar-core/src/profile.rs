@@ -76,9 +76,66 @@ pub struct Profile {
     /// Solo `drakes-java`: id de modpack gestionado.
     #[serde(default)]
     pub modpack: Option<String>,
+    /// Configuración de renderizado visual (OpenGL / Vulkan, resolución, GPU dedicada).
+    #[serde(default)]
+    pub graphics: GraphicsSettings,
     #[serde(default)]
     pub notes: String,
 }
+
+/// Backend de renderizado visual del cliente Minecraft.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GraphicsBackend {
+    /// OpenGL nativo (estándar de Minecraft, Sodium, Iris Shaders).
+    Opengl,
+    /// Vulkan nativo (VulkanMod, pipeline de bajo overhead para GPUs modernas).
+    Vulkan,
+}
+
+impl Default for GraphicsBackend {
+    fn default() -> Self {
+        Self::Opengl
+    }
+}
+
+/// Opciones de pantalla y aceleración gráfica para Minecraft.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphicsSettings {
+    #[serde(default)]
+    pub backend: GraphicsBackend,
+    #[serde(default = "default_width")]
+    pub width: Option<u32>,
+    #[serde(default = "default_height")]
+    pub height: Option<u32>,
+    #[serde(default)]
+    pub fullscreen: bool,
+    #[serde(default = "default_true")]
+    pub discrete_gpu: bool,
+}
+
+fn default_width() -> Option<u32> {
+    Some(1280)
+}
+fn default_height() -> Option<u32> {
+    Some(720)
+}
+fn default_true() -> bool {
+    true
+}
+
+impl Default for GraphicsSettings {
+    fn default() -> Self {
+        Self {
+            backend: GraphicsBackend::Opengl,
+            width: Some(1280),
+            height: Some(720),
+            fullscreen: false,
+            discrete_gpu: true,
+        }
+    }
+}
+
 fn default_loader() -> Loader {
     Loader::Vanilla
 }
@@ -188,6 +245,7 @@ mod tests {
             server: Some("play.example.net".into()),
             preset: None,
             modpack: None,
+            graphics: GraphicsSettings::default(),
             notes: String::new(),
         }
     }

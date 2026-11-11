@@ -10,6 +10,15 @@ export interface JavaSettings {
   max_mem_mb: number;
   extra_jvm_args: string[];
 }
+export type GraphicsBackend = 'opengl' | 'vulkan';
+export interface GraphicsSettings {
+  backend: GraphicsBackend;
+  width?: number | null;
+  height?: number | null;
+  fullscreen: boolean;
+  discrete_gpu: boolean;
+}
+
 export interface Profile {
   schema: number;
   id: string;
@@ -19,6 +28,7 @@ export interface Profile {
   minecraft: string;
   loader: Loader;
   java: JavaSettings;
+  graphics?: GraphicsSettings;
   server: string | null;
   preset: string | null;
   modpack: string | null;

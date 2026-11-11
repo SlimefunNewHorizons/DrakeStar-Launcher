@@ -124,6 +124,7 @@ fn main() {
         server: Some(format!("127.0.0.1:{login_port}")),
         preset: None,
         modpack: None,
+        graphics: drakestar_core::profile::GraphicsSettings::default(),
         notes: String::new(),
     };
     let sink = Arc::new(PrintSink);

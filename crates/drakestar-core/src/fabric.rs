@@ -344,11 +344,59 @@ pub fn client_plan(p: &Profile, v: &VersionInfo, c: &ClientLaunch) -> Option<Cli
     if let Some(a) = &v.arguments {
         args.extend(expand_args(&a.jvm, &vars));
     }
+    // Opciones gráficas en JVM args (OpenGL / Vulkan)
+    match p.graphics.backend {
+        crate::profile::GraphicsBackend::Vulkan => {
+            args.push("-Dvulkan.enabled=true".to_string());
+            args.push("-Dorg.lwjgl.vulkan.explicitInit=true".to_string());
+        }
+        crate::profile::GraphicsBackend::Opengl => {
+            args.push("-Dsun.java2d.opengl=true".to_string());
+            args.push("-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false".to_string());
+        }
+    }
     args.push(KNOT_MAIN_CLASS.to_string());
     if let Some(a) = &v.arguments {
         args.extend(expand_args(&a.game, &vars));
     }
-    Some(ClientPlan { program: c.java_bin.into(), args, cwd: c.game_dir.into() })
+    // Resolución de ventana y pantalla completa
+    if let Some(w) = p.graphics.width {
+        if !args.iter().any(|x| x == "--width") {
+            args.extend(["--width".into(), w.to_string()]);
+        }
+    }
+    if let Some(h) = p.graphics.height {
+        if !args.iter().any(|x| x == "--height") {
+            args.extend(["--height".into(), h.to_string()]);
+        }
+    }
+    if p.graphics.fullscreen && !args.iter().any(|x| x == "--fullscreen") {
+        args.push("--fullscreen".into());
+    }
+    // Autoconexión al servidor si está configurado en el perfil
+    if let Some(srv) = p.server.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !args.iter().any(|x| x == "--server") {
+            let (host, port) = if let Some((h, prt)) = srv.rsplit_once(':') {
+                (h, prt)
+            } else {
+                (srv, "25565")
+            };
+            args.push("--server".into());
+            args.push(host.to_string());
+            args.push("--port".into());
+            args.push(port.to_string());
+        }
+    }
+
+    let mut envs = std::collections::BTreeMap::new();
+    if p.graphics.discrete_gpu {
+        envs.insert("DRI_PRIME".into(), "1".into());
+        envs.insert("__NV_PRIME_RENDER_OFFLOAD".into(), "1".into());
+        envs.insert("__GLX_VENDOR_LIBRARY_NAME".into(), "nvidia".into());
+        envs.insert("__VK_LAYER_NV_optimus".into(), "NVIDIA_only".into());
+    }
+
+    Some(ClientPlan { program: c.java_bin.into(), args, cwd: c.game_dir.into(), envs })
 }
 
 #[cfg(test)]
@@ -369,6 +417,7 @@ mod tests {
             server: None,
             preset: None,
             modpack: None,
+            graphics: crate::profile::GraphicsSettings::default(),
             notes: String::new(),
         }
     }
@@ -501,6 +550,21 @@ mod tests {
         assert!(plan.args.windows(2).any(|w| w == ["--version", "fabric-loader-0.20.1-26.2"]));
         assert!(plan.args.contains(&"-Djava.library.path=/d/natives/java".to_string()));
         assert!(plan.args.contains(&"-Dminecraft.launcher.brand=DrakeStar".to_string()));
+        // backend gráfico por defecto (OpenGL) y resolución
+        assert!(plan.args.contains(&"-Dsun.java2d.opengl=true".to_string()));
+        assert!(plan.args.windows(2).any(|w| w == ["--width", "1280"]));
+        assert!(plan.args.windows(2).any(|w| w == ["--height", "720"]));
+        assert_eq!(plan.envs.get("DRI_PRIME").map(|s| s.as_str()), Some("1"));
+
+        // backend gráfico Vulkan y pantalla completa
+        let mut p_vulkan = p.clone();
+        p_vulkan.graphics.backend = crate::profile::GraphicsBackend::Vulkan;
+        p_vulkan.graphics.fullscreen = true;
+        let plan_vulkan = client_plan(&p_vulkan, &v, &l).unwrap();
+        assert!(plan_vulkan.args.contains(&"-Dvulkan.enabled=true".to_string()));
+        assert!(plan_vulkan.args.contains(&"-Dorg.lwjgl.vulkan.explicitInit=true".to_string()));
+        assert!(plan_vulkan.args.contains(&"--fullscreen".to_string()));
+
         // flags de sistema: solo los nuestros
         assert!(plan.args.contains(&"--enable-native-access=ALL-UNNAMED".to_string()));
         assert!(!plan.args.iter().any(|a| a.contains("HeapDumpPath")));

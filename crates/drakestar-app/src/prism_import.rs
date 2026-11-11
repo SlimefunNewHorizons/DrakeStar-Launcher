@@ -189,6 +189,7 @@ pub fn import_instance(
         server: None,
         preset: None,
         modpack: None,
+        graphics: drakestar_core::profile::GraphicsSettings::default(),
         notes: format!("Importado desde Prism Launcher ({})", summary.dir_name),
     };
 

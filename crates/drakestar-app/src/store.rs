@@ -173,6 +173,7 @@ pub(crate) mod tests {
             server: if mode == Mode::Online { Some("play.example.net".into()) } else { None },
             preset: None,
             modpack: None,
+            graphics: GraphicsSettings::default(),
             notes: String::new(),
         }
     }

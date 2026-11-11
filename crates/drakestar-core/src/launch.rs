@@ -3,11 +3,25 @@
 
 use crate::profile::{Mode, Profile};
 
-#[derive(Debug, Clone, PartialEq)]
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct LaunchPlan {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: String,
+    pub envs: BTreeMap<String, String>,
+}
+
+impl LaunchPlan {
+    pub fn new(program: impl Into<String>, args: Vec<String>, cwd: impl Into<String>) -> Self {
+        Self {
+            program: program.into(),
+            args,
+            cwd: cwd.into(),
+            envs: BTreeMap::new(),
+        }
+    }
 }
 
 /// Major de Java exigido por una version de Minecraft. Los snapshots/versiones
@@ -48,6 +62,7 @@ pub fn local_server_plan(
         program: java_bin.into(),
         args,
         cwd: format!("{root}/profiles/{}/server", p.id),
+        envs: BTreeMap::new(),
     })
 }
 
@@ -76,10 +91,18 @@ pub fn rust_client_plan_with_auth(
         args.push("--token".into());
         args.push(tok.to_string());
     }
+    let mut envs = BTreeMap::new();
+    if p.graphics.discrete_gpu {
+        envs.insert("DRI_PRIME".into(), "1".into());
+        envs.insert("__NV_PRIME_RENDER_OFFLOAD".into(), "1".into());
+        envs.insert("__GLX_VENDOR_LIBRARY_NAME".into(), "nvidia".into());
+        envs.insert("__VK_LAYER_NV_optimus".into(), "NVIDIA_only".into());
+    }
     Some(LaunchPlan {
         program: client_bin.into(),
         args,
         cwd: format!("{root}/profiles/{}/instance", p.id),
+        envs,
     })
 }
 
@@ -115,6 +138,7 @@ mod tests {
             server: None,
             preset: Some("slimefun".into()),
             modpack: None,
+            graphics: GraphicsSettings::default(),
             notes: String::new(),
         };
         let plan = local_server_plan(&p, "java", "drakespurpur.jar", "/d").unwrap();
@@ -140,6 +164,7 @@ mod tests {
             server: server.map(str::to_string),
             preset: None,
             modpack: None,
+            graphics: GraphicsSettings::default(),
             notes: String::new(),
         }
     }

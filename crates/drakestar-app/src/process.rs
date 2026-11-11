@@ -196,6 +196,7 @@ impl ProcessManager {
 
         let mut cmd = Command::new(&plan.program);
         cmd.args(&plan.args)
+            .envs(&plan.envs)
             .current_dir(&plan.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -347,7 +348,7 @@ mod tests {
     }
 
     fn plan(script: &str, cwd: &Path) -> LaunchPlan {
-        LaunchPlan { program: "sh".into(), args: vec!["-c".into(), script.into()], cwd: cwd.to_string_lossy().into() }
+        LaunchPlan::new("sh", vec!["-c".into(), script.into()], cwd.to_string_lossy())
     }
     fn wait_until(f: impl Fn() -> bool) {
         let t = Instant::now();
@@ -407,7 +408,7 @@ mod tests {
     fn missing_program_is_a_clear_error() {
         let d = crate::testutil::tmpdir("proc4");
         let pm = ProcessManager::new(Arc::new(Collect::default()));
-        let p = LaunchPlan { program: "no-existe-drakestar".into(), args: vec![], cwd: d.to_string_lossy().into() };
+        let p = LaunchPlan::new("no-existe-drakestar", vec![], d.to_string_lossy());
         let e = pm.start("m", &p, &d.join("l")).unwrap_err();
         assert!(e.to_string().contains("no se pudo ejecutar"));
         assert_eq!(pm.status("m").state, ProcState::Stopped);
@@ -428,11 +429,7 @@ mod windows_tests {
     }
 
     fn plan(script: &str, cwd: &Path) -> LaunchPlan {
-        LaunchPlan {
-            program: "cmd".into(),
-            args: vec!["/C".into(), script.into()],
-            cwd: cwd.to_string_lossy().into(),
-        }
+        LaunchPlan::new("cmd", vec!["/C".into(), script.into()], cwd.to_string_lossy())
     }
 
     fn wait_until(f: impl Fn() -> bool) {
