@@ -32,15 +32,15 @@ jobs:
         with: { name: ui-dist, path: ui/dist }
 
   tauri:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Dependencias de Tauri 2 (Linux)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
+          for i in 1 2 3; do sudo apt-get update && break || sleep 5; done
+          sudo apt-get install -y --fix-missing libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
       - uses: actions/download-artifact@v4
         with: { name: ui-dist, path: ui/dist }
       - name: Workspace completo (incluye el glue de Tauri)
