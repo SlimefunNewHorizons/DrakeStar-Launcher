@@ -30,6 +30,14 @@
       <dt>Backend</dt><dd>{#if app.info?.backend === 'tauri'}<span class="badge yes">Tauri (Rust real)</span>{:else}<span class="badge planned">MOCK de navegador</span>{/if}</dd>
       <dt>Plataforma</dt><dd>{app.info?.platform}</dd>
       <dt>Datos</dt><dd><code>{app.info?.data_dir}</code></dd>
+      <dt>Cuenta</dt>
+      <dd>
+        {#if app.settings.session_name}
+          <span class="badge yes">MSA: {app.settings.session_name}</span>
+        {:else}
+          <span class="badge neutral">Modo Offline (sin cuenta)</span>
+        {/if}
+      </dd>
     </dl>
   </section>
 
