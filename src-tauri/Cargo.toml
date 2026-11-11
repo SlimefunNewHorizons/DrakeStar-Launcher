@@ -16,6 +16,12 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+# Sin esta feature la app intenta cargar devUrl (http://localhost:5173) incluso
+# en release y falla con "Connection refused". Solo tiene sentido en release:
+# en dev el CLI de Tauri la activa el solo.
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 tauri = { version = "2", features = [] }
 serde.workspace = true
