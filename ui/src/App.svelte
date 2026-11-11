@@ -20,9 +20,11 @@
   import Updates from './views/Updates.svelte';
   import About from './views/About.svelte';
   import CrashReporterModal from './components/CrashReporterModal.svelte';
+  import MicrosoftAuthModal from './components/MicrosoftAuthModal.svelte';
 
   let fatal = $state<string | null>(null);
   let sidebarOpen = $state(false);
+  let msftModal = $state<{ openModal: () => void; closeModal: () => void } | undefined>();
   onMount(() => { app.init().catch((e) => (fatal = e instanceof Error ? e.message : String(e))); });
 
   const views: Record<string, Component<any>> = {
@@ -83,10 +85,29 @@
       <a class="brand" href="#/" aria-label="DrakeStar, inicio" onclick={() => (sidebarOpen = false)}>
         <img src={brand.logo} alt="DrakeStar" />
       </a>
-      <div role="group" aria-label="Selector de modo" class="tabs">
-        {#each modes as m (m)}
-          <button onclick={() => { sound.click(); pickMode(m); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-pressed={active?.mode === m} aria-label={modeLabel[m]}><img src={brand.tab(m, active?.mode === m)} alt={modeLabel[m]} /></button>
-        {/each}
+      <div class="row items-center" style="gap:.75rem;margin-left:auto">
+        <div role="group" aria-label="Selector de modo" class="tabs">
+          {#each modes as m (m)}
+            <button onclick={() => { sound.click(); pickMode(m); sidebarOpen = false; }} onmouseenter={() => sound.hover()} aria-pressed={active?.mode === m} aria-label={modeLabel[m]}><img src={brand.tab(m, active?.mode === m)} alt={modeLabel[m]} /></button>
+          {/each}
+        </div>
+        <button
+          type="button"
+          class="btn small"
+          style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:4px;font-size:0.8rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12)"
+          onclick={() => msftModal?.openModal()}
+          title={app.settings.session_name ? `Conectado como ${app.settings.session_name}` : 'Vincular cuenta de Minecraft / Microsoft'}
+        >
+          <span>🟩</span>
+          {#if app.settings.session_name}
+            <span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">
+              {app.settings.session_name}
+            </span>
+            <span class="badge yes" style="font-size:0.65rem;padding:1px 4px">MSA</span>
+          {:else}
+            <span>Login MS</span>
+          {/if}
+        </button>
       </div>
     </header>
     <div class="body">
@@ -152,4 +173,5 @@
     errorLog={app.crashReport.errorLog}
     component={app.crashReport.component}
   />
+  <MicrosoftAuthModal bind:this={msftModal} />
 </div>

@@ -316,6 +316,32 @@ export async function mockInvoke(cmd: string, a: Record<string, any> = {}): Prom
       { dir_name: 'DrakesCraft-ModPack-v67', path: '/home/jack/.local/share/PrismLauncher/instances/DrakesCraft-ModPack-v67', name: 'DrakesCraft ModPack v67 - LIMPIO', icon: 'flame', minecraft_version: '1.21.8', loader_version: '0.16.9', mod_count: 94 }
     ];
     case 'prism_import_instance': return { profile_id: 'prism-drakescraft-modpack-v67', profile_name: 'DrakesCraft ModPack v67 - LIMPIO', mods_imported: 94 };
+    case 'msft_login_start': return {
+      device_code: 'mock-dev-code-1234',
+      user_code: 'ABCD-WXYZ',
+      verification_uri: 'https://microsoft.com/link',
+      interval: 5,
+      expires_in: 900,
+    };
+    case 'msft_login_poll': {
+      settings.session_uuid = '12345678-1234-1234-1234-123456789abc';
+      settings.session_token = 'mock_msa_token_secret';
+      settings.session_name = 'JackStar';
+      return {
+        status: 'Success',
+        payload: {
+          uuid: settings.session_uuid,
+          name: settings.session_name,
+          access_token: settings.session_token,
+        },
+      };
+    }
+    case 'msft_logout': {
+      settings.session_uuid = null;
+      settings.session_token = null;
+      settings.session_name = null;
+      return settings;
+    }
     default: throw `comando desconocido en el mock: ${cmd}`;
   }
 }

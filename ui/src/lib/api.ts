@@ -1,7 +1,7 @@
 // Capa de acceso al backend. En Tauri llama a los comandos reales (drakestar-app).
 // En un navegador normal (vite dev / capturas) usa un MOCK en memoria, claramente marcado
 // en la UI (AppInfo.backend === 'mock'): no ejecuta procesos ni toca el disco.
-import type { AppInfo, JavaCheck, ModeCompat, Profile, ProfileList, ProcEvent, ProcStatus, LineRec, Settings, InstanceRow, LogFile, ServerStatus, Prop, PluginInfo, WorldInfo, Resolution, DeltaSyncPlan, DeltaSyncResult, ConflictReport, McStatus, LoadReport, RustClientStatus, ClientStatus, ModrinthSearchHit, ModrinthVersion, PrismInstanceSummary, PrismImportResult } from './types';
+import type { AppInfo, JavaCheck, ModeCompat, Profile, ProfileList, ProcEvent, ProcStatus, LineRec, Settings, InstanceRow, LogFile, ServerStatus, Prop, PluginInfo, WorldInfo, Resolution, DeltaSyncPlan, DeltaSyncResult, ConflictReport, McStatus, LoadReport, RustClientStatus, ClientStatus, ModrinthSearchHit, ModrinthVersion, PrismInstanceSummary, PrismImportResult, DeviceCodeAuth, PollResult } from './types';
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 type Listen = (cb: (e: ProcEvent) => void) => Promise<() => void>;
@@ -105,4 +105,8 @@ export const api = {
   modrinthInstall: (id: string, fileUrl: string, fileName: string) => call<number>('modrinth_install', { id, fileUrl, fileName }),
   prismListInstances: () => call<PrismInstanceSummary[]>('prism_list_instances'),
   prismImportInstance: (path: string) => call<PrismImportResult>('prism_import_instance', { path }),
+
+  msftLoginStart: () => call<DeviceCodeAuth>('msft_login_start'),
+  msftLoginPoll: (deviceCode: string) => call<PollResult>('msft_login_poll', { deviceCode }),
+  msftLogout: () => call<Settings>('msft_logout'),
 };

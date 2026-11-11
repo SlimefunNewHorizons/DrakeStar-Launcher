@@ -926,6 +926,7 @@ version = "0.5.1"
 dependencies = [
  "drakestar-app",
  "drakestar-core",
+ "drakestar-rust-client",
  "serde",
  "serde_json",
  "tauri",
@@ -971,6 +972,7 @@ dependencies = [
  "hex",
  "rand",
  "rsa",
+ "serde",
  "serde_json",
  "sha1 0.10.7",
  "ureq",

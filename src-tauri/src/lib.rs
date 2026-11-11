@@ -122,6 +122,42 @@ fn set_settings(svc: State<'_, Service>, settings: Settings) -> Res<Settings> {
     settings.save(&svc.layout).map_err(s)?;
     Ok(settings)
 }
+
+// ---------- autenticación Microsoft (OAuth 2.0 Device Code) ----------
+#[tauri::command]
+async fn msft_login_start() -> Res<drakestar_rust_client::auth::DeviceCodeAuth> {
+    blocking(|| drakestar_rust_client::auth::request_device_code().map_err(s)).await?
+}
+
+#[tauri::command]
+async fn msft_login_poll(
+    svc: State<'_, Service>,
+    device_code: String,
+) -> Res<drakestar_rust_client::auth::PollResult> {
+    let svc = svc.inner().clone();
+    blocking(move || {
+        let res = drakestar_rust_client::auth::poll_device_code(&device_code).map_err(s)?;
+        if let drakestar_rust_client::auth::PollResult::Success(ref session) = res {
+            let mut st = svc.settings();
+            st.session_uuid = Some(session.uuid.clone());
+            st.session_token = Some(session.access_token.clone());
+            st.session_name = Some(session.name.clone());
+            st.save(&svc.layout).map_err(s)?;
+        }
+        Ok(res)
+    })
+    .await?
+}
+
+#[tauri::command]
+fn msft_logout(svc: State<'_, Service>) -> Res<Settings> {
+    let mut st = svc.settings();
+    st.session_uuid = None;
+    st.session_token = None;
+    st.session_name = None;
+    st.save(&svc.layout).map_err(s)?;
+    Ok(st)
+}
 #[tauri::command]
 async fn detect_java(svc: State<'_, Service>) -> Res<JavaInfo> {
     let bin = svc.settings().java_bin();
@@ -482,7 +518,8 @@ pub fn run() {
             rust_client_status, rust_client_install, rust_client_plan, rust_client_start,
             rust_client_stop, rust_client_command, mods_report, mods_decide,
             mods_guard_override, modrinth_search, modrinth_versions, modrinth_install,
-            prism_list_instances, prism_import_instance
+            prism_list_instances, prism_import_instance,
+            msft_login_start, msft_login_poll, msft_logout
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar DrakeStar");

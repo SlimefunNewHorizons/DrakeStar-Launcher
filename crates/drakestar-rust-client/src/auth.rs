@@ -19,6 +19,7 @@
 //! conexión. Guardar un refresh token sería un secreto en el disco del usuario,
 //! y esta app no tiene dónde ponerlo de forma segura todavía.
 
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Cliente público de Minecraft en Microsoft.
@@ -42,12 +43,29 @@ const SESSION_JOIN: &str = "https://sessionserver.mojang.com/session/minecraft/j
 
 /// Sesión autenticada. El `access_token` es de Minecraft Services (no de
 /// Microsoft) y solo sirve para el `/join` del servidor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Session {
     /// UUID con guiones, como lo espera el Login Start.
     pub uuid: String,
     pub name: String,
     pub access_token: String,
+}
+
+/// Información del código de dispositivo para iniciar sesión en Microsoft.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceCodeAuth {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub interval: u64,
+    pub expires_in: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", content = "payload")]
+pub enum PollResult {
+    Pending(u64),
+    Success(Session),
 }
 
 #[derive(Debug)]
@@ -154,12 +172,9 @@ pub fn hyphens(id: &str) -> String {
     }
 }
 
-/// Hace el login completo. `out` recibe las líneas para el usuario (el código y
-/// la URL que tiene que abrir). Bloquea hasta que autorice o el código caduque.
-pub fn authenticate(out: &mut dyn FnMut(&str)) -> Result<Session, AuthError> {
+/// Solicita un nuevo código de dispositivo para login con Microsoft.
+pub fn request_device_code() -> Result<DeviceCodeAuth, AuthError> {
     let client_id = msft_client_id();
-
-    // 1) pedir el código de dispositivo mediante application/x-www-form-urlencoded
     let dc = post_form(
         MSFT_DEVICE_CODE,
         &[
@@ -170,57 +185,66 @@ pub fn authenticate(out: &mut dyn FnMut(&str)) -> Result<Session, AuthError> {
 
     let device_code = dc["device_code"].as_str().ok_or(AuthError::Parse("sin device_code".into()))?.to_string();
     let user_code = dc["user_code"].as_str().ok_or(AuthError::Parse("sin user_code".into()))?.to_string();
-    let verify_url = dc["verification_uri"].as_str().unwrap_or("https://microsoft.com/link").to_string();
+    let verification_uri = dc["verification_uri"].as_str().unwrap_or("https://microsoft.com/link").to_string();
     let interval = dc["interval"].as_u64().unwrap_or(5).max(5);
+    let expires_in = dc["expires_in"].as_u64().unwrap_or(900);
 
-    out(&format!("autoriza en {verify_url} con el codigo {user_code}"));
+    Ok(DeviceCodeAuth {
+        device_code,
+        user_code,
+        verification_uri,
+        interval,
+        expires_in,
+    })
+}
 
-    // 2) esperar a que autorice (caduca a los 15 min)
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(900);
-    let ms_token = loop {
-        if std::time::Instant::now() > deadline {
-            return Err(AuthError::Expired);
+/// Sondea el estado de autorización del código de dispositivo de Microsoft.
+/// Devuelve `Ok(PollResult::Pending(secs))` si el usuario aún no autoriza,
+/// o `Ok(PollResult::Success(session))` cuando se completa el ciclo completo.
+pub fn poll_device_code(device_code: &str) -> Result<PollResult, AuthError> {
+    let client_id = msft_client_id();
+    let res = post_form(
+        MSFT_TOKEN,
+        &[
+            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+            ("device_code", device_code),
+            ("client_id", &client_id),
+        ],
+    );
+
+    match res {
+        Ok(v) if v.get("access_token").is_some() => {
+            let ms_token = v["access_token"].as_str().unwrap();
+            let session = exchange_ms_token(ms_token)?;
+            Ok(PollResult::Success(session))
         }
-        let res = post_form(
-            MSFT_TOKEN,
-            &[
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("device_code", &device_code),
-                ("client_id", &client_id),
-            ],
-        );
-        match res {
-            Ok(v) if v.get("access_token").is_some() => break v["access_token"].as_str().unwrap().to_string(),
-            Ok(v) => {
-                let err = v["error"].as_str().unwrap_or("");
-                match err {
-                    "authorization_pending" => out(&format!("esperando autorizacion ({interval}s)")),
-                    "authorization_declined" => return Err(AuthError::Declined),
-                    "expired_token" => return Err(AuthError::Expired),
-                    other => return Err(AuthError::Parse(format!("estado inesperado '{other}'"))),
-                }
-                std::thread::sleep(std::time::Duration::from_secs(interval));
-            }
-            Err((_e, Some(v))) => {
-                // Microsoft devuelve HTTP 400 para estados como authorization_pending
-                let err = v["error"].as_str().unwrap_or("");
-                match err {
-                    "authorization_pending" => out(&format!("esperando autorizacion ({interval}s)")),
-                    "authorization_declined" => return Err(AuthError::Declined),
-                    "expired_token" => return Err(AuthError::Expired),
-                    other => return Err(AuthError::Parse(format!("estado oauth '{other}'"))),
-                }
-                std::thread::sleep(std::time::Duration::from_secs(interval));
-            }
-            Err((e, None)) => {
-                // un fallo de red transitorio no debe tumbar el login
-                out(&format!("reintentando ({e})"));
-                std::thread::sleep(std::time::Duration::from_secs(interval));
+        Ok(v) => {
+            let err = v["error"].as_str().unwrap_or("");
+            let interval = v["interval"].as_u64().unwrap_or(5).max(5);
+            match err {
+                "authorization_pending" => Ok(PollResult::Pending(interval)),
+                "authorization_declined" => Err(AuthError::Declined),
+                "expired_token" => Err(AuthError::Expired),
+                other => Err(AuthError::Parse(format!("estado inesperado '{other}'"))),
             }
         }
-    };
+        Err((_e, Some(v))) => {
+            let err = v["error"].as_str().unwrap_or("");
+            let interval = v["interval"].as_u64().unwrap_or(5).max(5);
+            match err {
+                "authorization_pending" => Ok(PollResult::Pending(interval)),
+                "authorization_declined" => Err(AuthError::Declined),
+                "expired_token" => Err(AuthError::Expired),
+                other => Err(AuthError::Parse(format!("estado oauth '{other}'"))),
+            }
+        }
+        Err((e, None)) => Err(e),
+    }
+}
 
-    // 3) Microsoft → Xbox Live
+/// Intercambia un access_token de Microsoft por una sesión completa de Minecraft Services.
+pub fn exchange_ms_token(ms_token: &str) -> Result<Session, AuthError> {
+    // 1) Microsoft → Xbox Live
     let xbl = post(
         XBL_AUTH,
         &json!({
@@ -235,7 +259,7 @@ pub fn authenticate(out: &mut dyn FnMut(&str)) -> Result<Session, AuthError> {
         .ok_or(AuthError::Parse("sin uhs de Xbox Live".into()))?
         .to_string();
 
-    // 4) Xbox Live → XSTS (el token que Minecraft acepta)
+    // 2) Xbox Live → XSTS (el token que Minecraft acepta)
     let xsts = post(
         XSTS_AUTH,
         &json!({
@@ -245,24 +269,47 @@ pub fn authenticate(out: &mut dyn FnMut(&str)) -> Result<Session, AuthError> {
         }),
     )?;
     if let Some(err) = xsts["XErr"].as_u64() {
-        // 2148916233 = la cuenta es de menor y necesita estar en un plan familiar
         return Err(AuthError::Parse(format!("XSTS rechazó (XErr {err})")));
     }
     let xsts_token = xsts["Token"].as_str().ok_or(AuthError::Parse("sin token XSTS".into()))?.to_string();
 
-    // 5) XSTS → sesión de Minecraft
+    // 3) XSTS → sesión de Minecraft
     let mc = post(
         MC_LOGIN,
         &json!({ "identityToken": format!("XBL3.0 x={uhs};{xsts_token}") }),
     )?;
     let access_token = mc["access_token"].as_str().ok_or(AuthError::Parse("sin token de Minecraft".into()))?.to_string();
 
-    // 6) perfil: uuid y nombre
+    // 4) perfil: uuid y nombre
     let prof = get(MC_PROFILE, &access_token)?;
     let raw_id = prof["id"].as_str().ok_or(AuthError::NoGame)?;
     let name = prof["name"].as_str().ok_or(AuthError::NoGame)?.to_string();
 
     Ok(Session { uuid: hyphens(raw_id), name, access_token })
+}
+
+/// Hace el login completo de forma síncrona/bloqueante (usado por CLI).
+pub fn authenticate(out: &mut dyn FnMut(&str)) -> Result<Session, AuthError> {
+    let dc = request_device_code()?;
+    out(&format!("autoriza en {} con el codigo {}", dc.verification_uri, dc.user_code));
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(dc.expires_in);
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err(AuthError::Expired);
+        }
+        match poll_device_code(&dc.device_code) {
+            Ok(PollResult::Success(s)) => return Ok(s),
+            Ok(PollResult::Pending(secs)) => {
+                out(&format!("esperando autorizacion ({secs}s)"));
+                std::thread::sleep(std::time::Duration::from_secs(secs));
+            }
+            Err(e) => {
+                out(&format!("reintentando ({e})"));
+                std::thread::sleep(std::time::Duration::from_secs(dc.interval));
+            }
+        }
+    }
 }
 
 /// Le dice a los servicios de Minecraft "voy a entrar a este servidor". Sin

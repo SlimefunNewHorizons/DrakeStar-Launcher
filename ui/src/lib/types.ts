@@ -58,7 +58,27 @@ export interface AppInfo {
   /** 'tauri' = backend Rust real; 'mock' = simulacion en el navegador. */
   backend: 'tauri' | 'mock';
 }
-export interface Settings { java_path: string | null; active_profile: string | null }
+export interface Settings {
+  java_path: string | null;
+  username?: string | null;
+  active_profile: string | null;
+  session_uuid?: string | null;
+  session_token?: string | null;
+  session_name?: string | null;
+}
+
+export interface DeviceCodeAuth {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  interval: number;
+  expires_in: number;
+}
+
+export type PollResult =
+  | { status: 'Pending'; payload: number }
+  | { status: 'Success'; payload: { uuid: string; name: string; access_token: string } };
+
 export interface JavaInfo { bin: string; found: boolean; version: string | null; major: number | null; error: string | null }
 export interface JavaCheck { info: JavaInfo; warning: string | null }
 
