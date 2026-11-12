@@ -1,5 +1,8 @@
 name: Release
 
+# Publicar una version: subir la version en src-tauri/tauri.conf.json, Cargo.toml (workspace) y ui/package.json,
+# y empujar la etiqueta `vX.Y.Z`. Este flujo compila los instaladores de cada sistema, los firma para el
+# actualizador automatico y sube `latest.json` (el que consulta la app instalada).
 on:
   push:
     tags:
@@ -18,11 +21,17 @@ jobs:
           - platform: 'windows-latest'
             args: ''
           - platform: 'macos-latest'
-            args: ''
+            args: '--target universal-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: La etiqueta coincide con la version de la app
+        shell: bash
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "La etiqueta ${GITHUB_REF_NAME} no coincide con la version $v de tauri.conf.json"; exit 1; }
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -42,30 +51,28 @@ jobs:
           for i in 1 2 3; do sudo apt-get update && break || sleep 5; done
           sudo apt-get install -y --fix-missing libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
 
-      - name: Install Frontend dependencies & build UI
+      - name: Install Frontend dependencies
         working-directory: ui
-        run: |
-          npm ci
-          npm run build
+        run: npm ci
 
-      - name: Build Tauri Desktop App & CLI
+      - name: Build Tauri Desktop App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Clave minisign del actualizador (secreto del repositorio; la publica va en tauri.conf.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Client ID de la app de Azure aprobada por Mojang (variable del repositorio; opcional)
+          DRAKESTAR_MSFT_CLIENT_ID: ${{ vars.DRAKESTAR_MSFT_CLIENT_ID }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'DrakeStar Launcher ${{ github.ref_name }}'
+          releaseName: 'DrakeStar ${{ github.ref_name }}'
           releaseBody: |
-            ## 🚀 DrakeStar Launcher ${{ github.ref_name }} — Sovereign Multiplatform Release
-            Official multi-platform build generated reproducibly via GitHub Actions CI.
+            Launcher de Minecraft de DrakesCraft. Minecraft 1.20 a 26.2, cuentas Microsoft y sin premium, Java y mods automaticos.
 
-            ### 📦 Binaries & Bundles
-            - **Linux**: `.deb`, `.AppImage`
-            - **Windows**: `.msi`, `.exe`
-            - **macOS**: `.dmg` (Universal / Apple Silicon & Intel)
-
-            ### 🛡️ Verification & Security
-            Every binary is compiled with `--locked` dependencies and automated Blackwall integrity guard.
+            **Instalar**: Windows `.exe` (recomendado: no pide permisos de administrador para actualizar) o `.msi`; Linux `.deb`, `.rpm` o `.AppImage`; macOS `.dmg`.
+            Si ya tienes DrakeStar 0.6 o mas nuevo, se actualiza solo desde Ajustes.
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}

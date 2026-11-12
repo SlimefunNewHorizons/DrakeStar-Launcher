@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # Logica sin Tauri: no necesita librerias graficas
-      - run: cargo test -p drakestar-core -p drakestar-net -p drakestar-app -p drakestar-cli
+      - run: cargo test -p drakestar-mc -p drakestar-core -p drakestar-net -p drakestar-app -p drakestar-cli
       - name: Validar ejemplos
         run: |
           for f in examples/profile-*.json; do cargo run -q -p drakestar-cli -- profile-check "$f"; done
