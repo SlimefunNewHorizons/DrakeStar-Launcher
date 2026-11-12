@@ -1,0 +1,20 @@
+[package]
+name = "drakestar-mc"
+description = "Nucleo de lanzador de Minecraft: versiones, librerias, assets, Java administrado, Fabric, argumentos y proceso (sin Tauri)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+drakestar-net = { path = "../drakestar-net" }
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "2", features = ["json"] }
+zip = "2"
+flate2 = "1"
+tar = "0.4"
+md-5 = "0.10"
+sha2 = "0.11"
+regex = "1"
+
+[dev-dependencies]
