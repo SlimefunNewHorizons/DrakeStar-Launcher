@@ -17,6 +17,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 type Res<T> = Result<T, String>;
+
+/// Ids de instancia: solo minusculas, numeros, `-` y `_` (igual que `Instance::validate`); evita salirse de `instances/`.
+fn safe_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 48 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+}
 fn s<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
@@ -323,7 +328,7 @@ fn game_kill(st: State<'_, AppState>) {
 #[tauri::command]
 fn logs_read(st: State<'_, AppState>, source: String, instance: Option<String>, max_lines: usize) -> Vec<String> {
     let path = match (source.as_str(), instance) {
-        ("game", Some(id)) => st.dirs.instance(&id).join("logs").join("latest.log"),
+        ("game", Some(id)) if safe_id(&id) => st.dirs.instance(&id).join("logs").join("latest.log"),
         _ => support::log_dir(&st.dirs).join("launcher.log"),
     };
     let path = if source == "launcher" {
@@ -368,7 +373,7 @@ async fn support_report(st: State<'_, AppState>, instance: Option<String>, send:
 #[tauri::command]
 fn open_folder(app: AppHandle, st: State<'_, AppState>, kind: String, id: Option<String>) -> Res<()> {
     let path = match (kind.as_str(), id) {
-        ("instance", Some(id)) => st.dirs.instance(&id),
+        ("instance", Some(id)) if safe_id(&id) => st.dirs.instance(&id),
         ("logs", _) => support::log_dir(&st.dirs),
         ("support", _) => st.dirs.root().join("support"),
         _ => st.dirs.root().to_path_buf(),
