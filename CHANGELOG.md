@@ -2,7 +2,7 @@
 
 ## Sin publicar
 
-- **Servidor local gestionado**: «Slimefun en solitario / LAN» ahora baja Purpur (MD5 verificado) y Slimefun4-Drake, arranca el servidor en 127.0.0.1 (o LAN), espera a que abra el puerto y entra solo con el cliente (Minecraft 1.21.11). Al cerrar el juego o el launcher el servidor se cierra. Aceptas el EULA de Mojang al jugar. Las plantillas antiguas con Fused migran solas.
+- **Servidor local gestionado**: «Slimefun en solitario / LAN» ahora usa el **monolito DrakesPurpur 26.2** del último release estable (trae Slimefun y las 9 suites; Java 25; ~95 MB la primera vez; probado: arranca en 22 s). Para versiones anteriores a 26 usa Purpur (MD5 verificado) + Slimefun4-Drake. Arranca arranca el servidor en 127.0.0.1 (o LAN), espera a que abra el puerto y entra solo con el cliente (Minecraft 1.21.11). Al cerrar el juego o el launcher el servidor se cierra. Aceptas el EULA de Mojang al jugar. Las plantillas antiguas con Fused migran solas.
 
 ## 0.6.0 — launcher rehecho (2026-11-12)
 

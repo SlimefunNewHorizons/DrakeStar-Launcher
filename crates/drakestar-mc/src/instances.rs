@@ -90,14 +90,14 @@ pub fn presets() -> Vec<Instance> {
         Instance {
             id: "slimefun-solo".into(),
             name: "Slimefun en solitario / LAN".into(),
-            mc: "1.21.11".into(),
+            mc: "26.2".into(),
             loader: Loader::Fabric,
             target: Target::Local { port: 25570, lan: false },
             performance: true,
             fused: false,
-            xmx_mb: 4096,
+            xmx_mb: 8192,
             extra_jvm: vec![],
-            note: "Servidor propio en tu equipo con Slimefun: el launcher lo arranca y entras solo. Al jugar aceptas el EULA de Mojang (aka.ms/MinecraftEULA).".into(),
+            note: "Servidor propio en tu equipo con el monolito DrakesPurpur (Slimefun y las suites, Java 25; pide ~8 GB de RAM libres): el launcher lo arranca y entras solo. Al jugar aceptas el EULA de Mojang (aka.ms/MinecraftEULA).".into(),
         },
         Instance {
             id: "vanilla-latest".into(),

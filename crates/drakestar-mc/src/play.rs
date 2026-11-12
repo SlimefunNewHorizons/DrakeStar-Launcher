@@ -107,15 +107,17 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
     let mut local = None;
     if let Target::Local { port, lan } = &inst.target {
         let port = server::free_port(*port);
-        let jar = server::ensure_purpur(d, &inst.id, &inst.mc, sink)?;
+        // 26.x: el monolito DrakesPurpur (ya trae Slimefun y las suites); antes de 26: Purpur + Slimefun
+        let monolith = server::is_monolith(&inst.mc);
+        let jar = if monolith { server::ensure_drakespurpur(d, &inst.id, sink)? } else { server::ensure_purpur(d, &inst.id, &inst.mc, sink)? };
         let sjava = java::ensure(d, server::java_major(&inst.mc), sink)?;
         server::configure(d, &inst.id, port, *lan)?;
-        match mods::ensure_slimefun(&server::dir(d, &inst.id).join("plugins"), &inst.mc) {
+        match if monolith { Ok(Some(std::path::PathBuf::new())) } else { mods::ensure_slimefun(&server::dir(d, &inst.id).join("plugins"), &inst.mc) } {
             Ok(Some(_)) => {}
             Ok(None) => warnings.push(format!("Slimefun aun no tiene build para Minecraft {}: el servidor local abre sin Slimefun.", inst.mc)),
             Err(e) => warnings.push(format!("No se pudo instalar Slimefun: {e}")),
         }
-        local = Some(LocalServer { plan: server::plan(d, &inst.id, &jar, sjava, (inst.xmx_mb / 2).max(1536)), port, log_file: server::dir(d, &inst.id).join("logs").join("launcher-server.log") });
+        local = Some(LocalServer { plan: server::plan(d, &inst.id, &jar, sjava, (inst.xmx_mb / 2).max(if monolith { 3072 } else { 1536 })), port, log_file: server::dir(d, &inst.id).join("logs").join("launcher-server.log") });
         o.join_server = Some(format!("127.0.0.1:{port}"));
     }
     let plan = launch::plan(d, &installed, &session, &o)?;

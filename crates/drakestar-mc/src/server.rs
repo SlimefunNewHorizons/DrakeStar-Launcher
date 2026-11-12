@@ -63,6 +63,54 @@ pub fn ensure_purpur(d: &Dirs, inst_id: &str, mc: &str, sink: &dyn ProgressSink)
     Ok(jar)
 }
 
+#[derive(serde::Deserialize)]
+struct GhAsset {
+    name: String,
+    size: u64,
+    browser_download_url: String,
+}
+#[derive(serde::Deserialize)]
+struct GhRel {
+    assets: Vec<GhAsset>,
+}
+
+/// El monolito DrakesPurpur (Purpur + nucleo Drakes + 9 suites con Slimefun y los 94 addons) existe solo para 26.x.
+pub fn is_monolith(mc: &str) -> bool {
+    mc.starts_with("26.")
+}
+
+/// Baja el jar del ultimo release estable de DrakesPurpur (`purpur-paperclip-*.jar`), comprobando el tamano publicado.
+pub fn ensure_drakespurpur(d: &Dirs, inst_id: &str, sink: &dyn ProgressSink) -> McResult<PathBuf> {
+    let sdir = dir(d, inst_id);
+    std::fs::create_dir_all(&sdir)?;
+    let rel: GhRel = ureq::get("https://api.github.com/repos/SlimefunNewHorizons/DrakesPurpur/releases/latest")
+        .set("User-Agent", "SlimefunNewHorizons/DrakeStar-Launcher")
+        .timeout(Duration::from_secs(30))
+        .call()
+        .map_err(|e| McError::Net(format!("DrakesPurpur: {e}")))?
+        .into_json()
+        .map_err(|e| McError::Json(e.to_string()))?;
+    let a = rel.assets.iter().find(|a| a.name.starts_with("purpur-paperclip-") && a.name.ends_with(".jar")).ok_or_else(|| McError::NotFound("el release de DrakesPurpur no trae el jar".into()))?;
+    let jar = sdir.join(&a.name);
+    if std::fs::metadata(&jar).map(|m| m.len()).unwrap_or(0) != a.size {
+        sink.stage("server", "Descargando DrakesPurpur (~95 MB, solo la primera vez)");
+        drakestar_net::download_direct(&a.browser_download_url, &jar)?;
+        if std::fs::metadata(&jar).map(|m| m.len()).unwrap_or(0) != a.size {
+            let _ = std::fs::remove_file(&jar);
+            return Err(McError::Invalid("el jar de DrakesPurpur se descargo incompleto".into()));
+        }
+    }
+    if let Ok(rd) = std::fs::read_dir(&sdir) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n.starts_with("purpur-") && n.ends_with(".jar") && n != a.name {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    Ok(jar)
+}
+
 fn md5_hex(b: &[u8]) -> String {
     Md5::digest(b).iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -96,7 +144,7 @@ pub fn configure(d: &Dirs, inst_id: &str, port: u16, lan: bool) -> McResult<()> 
 pub fn plan(d: &Dirs, inst_id: &str, jar: &std::path::Path, java_bin: PathBuf, xmx_mb: u32) -> Plan {
     Plan {
         program: java_bin,
-        args: vec![format!("-Xmx{xmx_mb}M"), format!("-Xms{}M", (xmx_mb / 4).max(512)), "-jar".into(), jar.to_string_lossy().into_owned(), "--nogui".into()],
+        args: vec![format!("-Xmx{xmx_mb}M"), format!("-Xms{}M", (xmx_mb / 4).max(512)), "--enable-native-access=ALL-UNNAMED".into(), "-jar".into(), jar.to_string_lossy().into_owned(), "--nogui".into()],
         cwd: dir(d, inst_id),
     }
 }
