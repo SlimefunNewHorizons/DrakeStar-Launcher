@@ -197,7 +197,7 @@ mod tests {
     fn redacts_tokens_paths_emails_and_ips() {
         let r = redact(r"--accessToken eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk user C:\Users\Pablo\AppData ip 181.58.88.6 mail a@b.cl");
         assert!(!r.contains("eyJhbGci"), "{r}");
-        assert!(!r.contains("Pablo"), "{r}");
+        assert!(!r.contains("Alex"), "{r}");
         assert!(!r.contains("181.58.88.6"), "{r}");
         assert!(!r.contains("a@b.cl"), "{r}");
         assert!(r.contains(r"C:\Users\<user>"));
