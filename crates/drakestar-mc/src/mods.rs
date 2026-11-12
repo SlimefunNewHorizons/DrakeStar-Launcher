@@ -161,3 +161,22 @@ pub fn ensure_fused(mods_dir: &Path, mc: &str, loader: &str) -> McResult<Option<
     }
     Ok(None)
 }
+
+/// Slimefun4-Drake para el servidor local: el jar `Slimefun-*-<mc>-SNAPSHOT.jar` del release mas reciente que lo tenga.
+/// `None` si no hay build para esa version de Minecraft.
+pub fn ensure_slimefun(plugins_dir: &Path, mc: &str) -> McResult<Option<PathBuf>> {
+    let rels: Vec<GhRelease> = get_json("https://api.github.com/repos/SlimefunNewHorizons/Slimefun4-Drake/releases?per_page=15")?;
+    let tail = format!("-{mc}-SNAPSHOT.jar");
+    for r in &rels {
+        if let Some(a) = r.assets.iter().find(|a| a.name.starts_with("Slimefun-") && a.name.ends_with(&tail)) {
+            let dest = plugins_dir.join(&a.name);
+            std::fs::create_dir_all(plugins_dir)?;
+            if !dest.exists() || std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0) != a.size {
+                drakestar_net::download_direct(&a.browser_download_url, &dest)?;
+            }
+            remove_matching(plugins_dir, |n| n.starts_with("Slimefun-") && n.ends_with(".jar") && n != a.name);
+            return Ok(Some(dest));
+        }
+    }
+    Ok(None)
+}

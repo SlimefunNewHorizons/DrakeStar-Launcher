@@ -24,6 +24,7 @@ pub mod msa;
 pub mod offline;
 pub mod play;
 pub mod progress;
+pub mod server;
 pub mod settings;
 pub mod support;
 pub mod version;

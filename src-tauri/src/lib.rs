@@ -9,7 +9,7 @@ use drakestar_mc::launch::{self, GameHandle};
 use drakestar_mc::msa::{self, DeviceCode, Poll};
 use drakestar_mc::progress::CancelFlag;
 use drakestar_mc::settings::Settings;
-use drakestar_mc::{manifest, play, support, Dirs, ProgressSink};
+use drakestar_mc::{manifest, play, server, support, Dirs, ProgressSink};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -30,6 +30,8 @@ struct AppState {
     dirs: Dirs,
     cancel: Mutex<CancelFlag>,
     game: Mutex<Option<GameHandle>>,
+    /// Servidor local gestionado (instancias `local`); se cierra con el juego.
+    server: Mutex<Option<GameHandle>>,
     login_cancel: Mutex<Option<Arc<AtomicBool>>>,
     busy: AtomicBool,
     /// El jugador cerro el juego desde el launcher: no cuenta como fallo.
@@ -260,6 +262,39 @@ fn play(app: AppHandle, st: State<'_, AppState>, instance_id: String, account_id
                 return;
             }
         };
+        if let Some(ls) = &prepared.server {
+            emit("preparing", "Arrancando tu servidor local (la primera vez tarda)".into(), None, vec![]);
+            support::app_log(&dirs, "INFO", &format!("servidor local de {} en el puerto {}", inst.id, ls.port));
+            let dead = Arc::new(AtomicBool::new(false));
+            let dead2 = dead.clone();
+            let app_l = app2.clone();
+            let sh = launch::spawn(
+                &ls.plan,
+                vec![],
+                Some(ls.log_file.clone()),
+                move |stream, line| {
+                    let _ = app_l.emit("game-line", serde_json::json!({ "stream": stream, "line": format!("[servidor] {}", support::redact(line)) }));
+                },
+                move |_| dead2.store(true, Ordering::SeqCst),
+            );
+            let sh = match sh {
+                Ok(h) => h,
+                Err(e) => {
+                    st.busy.store(false, Ordering::SeqCst);
+                    emit("error", e.to_string(), None, vec![]);
+                    return;
+                }
+            };
+            *st.server.lock().unwrap() = Some(sh.clone());
+            if let Err(e) = server::wait_ready(ls.port, std::time::Duration::from_secs(300), || !dead.load(Ordering::SeqCst), || cancel.is_cancelled()) {
+                sh.kill();
+                *st.server.lock().unwrap() = None;
+                support::app_log(&dirs, "ERROR", &format!("servidor local: {e}"));
+                st.busy.store(false, Ordering::SeqCst);
+                emit(if cancel.is_cancelled() { "cancelled" } else { "error" }, e.to_string(), None, vec![]);
+                return;
+            }
+        }
         support::app_log(&dirs, "INFO", &format!("lanzando {} ({}) con Java {}", inst.id, prepared.version_id, prepared.java_major));
         let started = std::time::SystemTime::now();
         let (app3, d3, inst3, game_dir) = (app2.clone(), dirs.clone(), inst.clone(), prepared.game_dir.clone());
@@ -279,6 +314,9 @@ fn play(app: AppHandle, st: State<'_, AppState>, instance_id: String, account_id
                 let st = app3.state::<AppState>();
                 let crashed = !st.closing.swap(false, Ordering::SeqCst) && code != Some(0);
                 *st.game.lock().unwrap() = None;
+                if let Some(sv) = st.server.lock().unwrap().take() {
+                    sv.kill();
+                }
                 st.busy.store(false, Ordering::SeqCst);
                 support::app_log(&d3, "INFO", &format!("el juego termino ({code:?})"));
                 let _ = app3.emit("game-state", GameState { state: if crashed { "crashed" } else { "exited" }, message: String::new(), code, warnings: vec![] });
@@ -410,8 +448,16 @@ pub fn run() {
             support::install_panic_hook(dirs.clone());
             support::rotate(&dirs, 14);
             support::app_log(&dirs, "INFO", &format!("DrakeStar {} arranca ({} {})", env!("CARGO_PKG_VERSION"), drakestar_mc::os_name(), drakestar_mc::arch_name()));
-            app.manage(AppState { dirs, cancel: Mutex::new(CancelFlag::default()), game: Mutex::new(None), login_cancel: Mutex::new(None), busy: AtomicBool::new(false), closing: AtomicBool::new(false) });
+            app.manage(AppState { dirs, cancel: Mutex::new(CancelFlag::default()), game: Mutex::new(None), server: Mutex::new(None), login_cancel: Mutex::new(None), busy: AtomicBool::new(false), closing: AtomicBool::new(false) });
             Ok(())
+        })
+        .on_window_event(|w, ev| {
+            // al cerrar el launcher no se deja un servidor local huerfano
+            if let tauri::WindowEvent::Destroyed = ev {
+                if let Some(sv) = w.app_handle().state::<AppState>().server.lock().unwrap().take() {
+                    sv.kill();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             app_info, settings_get, settings_set, accounts_list, account_add_offline, account_remove, account_set_default,

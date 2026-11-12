@@ -21,6 +21,9 @@ pub enum Target {
     Server { address: String },
     /// Abre un mundo guardado (un jugador / LAN).
     World { name: String },
+    /// Servidor Purpur local gestionado (con Slimefun si hay build): el launcher lo arranca y entra solo.
+    /// `lan` lo abre a la red local; si no, solo escucha en este equipo.
+    Local { port: u16, lan: bool },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +62,9 @@ impl Instance {
         if (self.performance || self.fused) && self.loader != Loader::Fabric {
             return Err(McError::Invalid("los mods de rendimiento y Fused necesitan Fabric".into()));
         }
+        if matches!(self.target, Target::Local { .. }) && (self.fused || self.performance && self.loader != Loader::Fabric) {
+            return Err(McError::Invalid("un servidor local no usa Fused (los plugins van en el servidor)".into()));
+        }
         if self.xmx_mb < 1024 || self.xmx_mb > 65536 {
             return Err(McError::Invalid("la memoria debe estar entre 1024 y 65536 MB".into()));
         }
@@ -84,14 +90,14 @@ pub fn presets() -> Vec<Instance> {
         Instance {
             id: "slimefun-solo".into(),
             name: "Slimefun en solitario / LAN".into(),
-            mc: "1.21.1".into(),
+            mc: "1.21.11".into(),
             loader: Loader::Fabric,
-            target: Target::Menu,
+            target: Target::Local { port: 25570, lan: false },
             performance: true,
-            fused: true,
+            fused: false,
             xmx_mb: 4096,
             extra_jvm: vec![],
-            note: "Mundo propio con DrakeStar Fused (alfa, Slimefun en desarrollo). Abre el menu: crea un mundo o abre uno a LAN.".into(),
+            note: "Servidor propio en tu equipo con Slimefun: el launcher lo arranca y entras solo. Al jugar aceptas el EULA de Mojang (aka.ms/MinecraftEULA).".into(),
         },
         Instance {
             id: "vanilla-latest".into(),
@@ -120,7 +126,16 @@ impl Instances {
     /// Lista guardada; la primera vez crea las plantillas.
     pub fn list(&self) -> Vec<Instance> {
         match std::fs::read_to_string(&self.path).ok().and_then(|t| serde_json::from_str::<Vec<Instance>>(&t).ok()) {
-            Some(v) => v,
+            Some(mut v) => {
+                // la plantilla antigua de Slimefun solitario (Fused alfa en el menu) pasa al servidor local
+                if let Some(x) = v.iter_mut().find(|x| x.id == "slimefun-solo" && x.fused && x.target == Target::Menu) {
+                    if let Some(p) = presets().into_iter().find(|p| p.id == "slimefun-solo") {
+                        *x = p;
+                        let _ = self.save(&v);
+                    }
+                }
+                v
+            }
             None => {
                 let p = presets();
                 let _ = self.save(&p);

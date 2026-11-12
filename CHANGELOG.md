@@ -1,5 +1,9 @@
 # Cambios
 
+## Sin publicar
+
+- **Servidor local gestionado**: «Slimefun en solitario / LAN» ahora baja Purpur (MD5 verificado) y Slimefun4-Drake, arranca el servidor en 127.0.0.1 (o LAN), espera a que abra el puerto y entra solo con el cliente (Minecraft 1.21.11). Al cerrar el juego o el launcher el servidor se cierra. Aceptas el EULA de Mojang al jugar. Las plantillas antiguas con Fused migran solas.
+
 ## 0.6.0 — launcher rehecho (2026-11-12)
 
 Foco: que se pueda **jugar**. Es un launcher de Minecraft, no de servidores.

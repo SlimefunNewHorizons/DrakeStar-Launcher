@@ -10,7 +10,7 @@ const es: Record<string, string> = {
   'play.crashed': 'El juego se cerró con un error{code}.', 'play.error': 'No se pudo iniciar el juego.', 'play.exited': 'El juego se cerró.', 'play.cancelled': 'Cancelado.',
   'play.report_sent': 'Se envió un reporte automático para poder arreglarlo (datos personales tachados).', 'play.report_saved': 'Se guardó un reporte en tu PC.',
   'play.view_logs': 'Ver registros', 'play.disable_fused': 'Desactivar Fused', 'play.send_report': 'Enviar reporte', 'play.no_instances': 'No hay instancias. Crea una en la pestaña Instancias.',
-  'target.menu': 'Menú principal', 'target.server': 'Servidor {addr}', 'target.world': 'Mundo «{name}»',
+  'target.menu': 'Menú principal', 'target.server': 'Servidor {addr}', 'target.local': 'Servidor propio en este equipo', 'target.world': 'Mundo «{name}»',
 
   'acc.title': 'Cuentas', 'acc.subtitle': 'Puedes tener varias cuentas, premium y sin premium, y elegir con cuál jugar.',
   'acc.add_ms': 'Iniciar sesión con Microsoft', 'acc.add_ms_hint': 'Cuenta premium de Minecraft Java. Se abre tu navegador solo.',
@@ -66,7 +66,7 @@ const en: Record<string, string> = {
   'play.crashed': 'The game closed with an error{code}.', 'play.error': 'The game could not start.', 'play.exited': 'The game closed.', 'play.cancelled': 'Cancelled.',
   'play.report_sent': 'An automatic report was sent so it can be fixed (personal data removed).', 'play.report_saved': 'A report was saved on your PC.',
   'play.view_logs': 'View logs', 'play.disable_fused': 'Turn off Fused', 'play.send_report': 'Send report', 'play.no_instances': 'No instances yet. Create one in the Instances tab.',
-  'target.menu': 'Main menu', 'target.server': 'Server {addr}', 'target.world': 'World “{name}”',
+  'target.menu': 'Main menu', 'target.server': 'Server {addr}', 'target.local': 'Own server on this PC', 'target.world': 'World “{name}”',
 
   'acc.title': 'Accounts', 'acc.subtitle': 'You can keep several accounts, premium and offline, and pick which one to play with.',
   'acc.add_ms': 'Sign in with Microsoft', 'acc.add_ms_hint': 'Premium Minecraft Java account. Your browser opens by itself.',

@@ -2,7 +2,7 @@ export type Kind = 'microsoft' | 'offline';
 export interface Account { id: string; kind: Kind; name: string; uuid: string; added_at: number; last_used?: number | null }
 export interface AccountList { accounts: Account[]; default: string | null }
 
-export type Target = { kind: 'menu' } | { kind: 'server'; address: string } | { kind: 'world'; name: string };
+export type Target = { kind: 'menu' } | { kind: 'server'; address: string } | { kind: 'world'; name: string } | { kind: 'local'; port: number; lan: boolean };
 export interface Instance {
   id: string; name: string; mc: string; loader: 'vanilla' | 'fabric'; target: Target;
   performance: boolean; fused: boolean; xmx_mb: number; extra_jvm: string[]; note: string;

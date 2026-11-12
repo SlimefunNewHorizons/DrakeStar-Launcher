@@ -16,6 +16,7 @@ fn main() {
     match play::prepare(&d, &inst, &acc.id, "00000000-0000-0000-0000-000000000000", &NullSink) {
         Ok(p) => {
             println!("OK {} con Java {} ({} argumentos)", p.version_id, p.java_major, p.plan.args.len());
+            println!("servidor local: {}", p.server.as_ref().map(|s| s.port.to_string()).unwrap_or("no".into()));
             for w in &p.warnings {
                 println!("aviso: {w}");
             }

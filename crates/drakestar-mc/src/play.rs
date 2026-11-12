@@ -4,7 +4,7 @@ use crate::accounts::Accounts;
 use crate::instances::{Instance, Loader, Target};
 use crate::launch::{self, Options, Plan, Session};
 use crate::progress::ProgressSink;
-use crate::{fabric, install, java, mods, Dirs, McError, McResult};
+use crate::{fabric, install, java, mods, server, Dirs, McError, McResult};
 
 /// Resultado de preparar una instancia: todo listo para `launch::spawn`.
 pub struct Prepared {
@@ -15,6 +15,14 @@ pub struct Prepared {
     pub warnings: Vec<String>,
     pub java_major: u32,
     pub version_id: String,
+    /// Servidor local que hay que arrancar y esperar antes del cliente (`Target::Local`).
+    pub server: Option<LocalServer>,
+}
+
+pub struct LocalServer {
+    pub plan: launch::Plan,
+    pub port: u16,
+    pub log_file: std::path::PathBuf,
 }
 
 /// Prepara la instancia sin lanzar. `client_id` es el de la app de Azure para renovar cuentas Microsoft.
@@ -93,9 +101,25 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
         Target::Menu => {}
         Target::Server { address } => o.join_server = Some(address.clone()),
         Target::World { name } => o.open_world = Some(name.clone()),
+        Target::Local { .. } => {}
+    }
+    // servidor local: Purpur + Slimefun, con su propio Java
+    let mut local = None;
+    if let Target::Local { port, lan } = &inst.target {
+        let port = server::free_port(*port);
+        let jar = server::ensure_purpur(d, &inst.id, &inst.mc, sink)?;
+        let sjava = java::ensure(d, server::java_major(&inst.mc), sink)?;
+        server::configure(d, &inst.id, port, *lan)?;
+        match mods::ensure_slimefun(&server::dir(d, &inst.id).join("plugins"), &inst.mc) {
+            Ok(Some(_)) => {}
+            Ok(None) => warnings.push(format!("Slimefun aun no tiene build para Minecraft {}: el servidor local abre sin Slimefun.", inst.mc)),
+            Err(e) => warnings.push(format!("No se pudo instalar Slimefun: {e}")),
+        }
+        local = Some(LocalServer { plan: server::plan(d, &inst.id, &jar, sjava, (inst.xmx_mb / 2).max(1536)), port, log_file: server::dir(d, &inst.id).join("logs").join("launcher-server.log") });
+        o.join_server = Some(format!("127.0.0.1:{port}"));
     }
     let plan = launch::plan(d, &installed, &session, &o)?;
-    Ok(Prepared { plan, session, game_dir, warnings, java_major: installed.java_major, version_id })
+    Ok(Prepared { plan, session, game_dir, warnings, java_major: installed.java_major, version_id, server: local })
 }
 
 fn has_jar(dir: &std::path::Path, prefix: &str) -> bool {

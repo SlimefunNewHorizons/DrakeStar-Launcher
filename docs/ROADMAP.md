@@ -12,7 +12,7 @@ Verificado: pruebas del motor (24), lanzamiento real en Linux (Fabric 1.20.1, 1.
 2. **Publicar** launcher v0.6.0 y Fused v1.0.0-alpha.3; desplegar el recolector de reportes en la web.
 3. **Fused**: el host Bukkit real dentro del servidor integrado (hoy solo prepara el entorno). Después, builds por loader (NeoForge/Forge) si se necesitan.
 4. **Horizon** (cliente Rust 26.3) como motor de una instancia, cuando exista el client ID propio.
-5. Servidor local gestionado para «Slimefun solitario» mientras Fused no ejecute plugins (el launcher abriría el servidor y el cliente juntos).
+5. ~~Servidor local gestionado~~ (hecho, sin publicar: ver CHANGELOG). Falta probar la UI real con jugador y un selector LAN en la interfaz.
 6. Importar instancias de Prism/CurseForge/Modrinth; modpacks; perfil de memoria automático según la RAM del equipo.
 7. Decidir el destino de los crates heredados (`drakestar-app`, `-core`, `-cli`, `-rust-client`, `-native-example`).
 

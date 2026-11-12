@@ -31,7 +31,7 @@
   async function save(e: Event) {
     e.preventDefault();
     const name = draft.name.trim();
-    const target: Target = tkind === 'server' ? { kind: 'server', address: taddr.trim() } : tkind === 'world' ? { kind: 'world', name: tworld.trim() } : { kind: 'menu' };
+    const target: Target = draft.target.kind === 'local' ? draft.target : tkind === 'server' ? { kind: 'server', address: taddr.trim() } : tkind === 'world' ? { kind: 'world', name: tworld.trim() } : { kind: 'menu' };
     const inst: Instance = {
       ...$state.snapshot(draft), id: draft.id || slug(name), name, target, mc: draft.mc.trim(),
       performance: fabric && draft.performance, fused: fabric && draft.fused, extra_jvm: jvm.split(/\s+/).filter(Boolean),

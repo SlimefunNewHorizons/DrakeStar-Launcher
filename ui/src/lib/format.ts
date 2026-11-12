@@ -7,6 +7,7 @@ export function targetLabel(i: Instance): string {
   switch (i.target.kind) {
     case 'server': return t('target.server', { addr: i.target.address });
     case 'world': return t('target.world', { name: i.target.name });
+    case 'local': return t('target.local');
     default: return t('target.menu');
   }
 }
