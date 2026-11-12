@@ -2,7 +2,7 @@
 import { api, checkUpdate, listen, type UpdateInfo } from './api';
 import { errText } from './format';
 import { setLang, t } from './i18n.svelte';
-import type { Account, AccountList, AppInfo, DeviceCode, GameState, GameStateName, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
+import type { MemoryProfile, Account, AccountList, AppInfo, DeviceCode, GameState, GameStateName, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
 
 export type View = 'play' | 'accounts' | 'instances' | 'settings' | 'logs';
 export type Phase = 'idle' | GameStateName;
@@ -17,6 +17,7 @@ class Store {
   info = $state<AppInfo | null>(null);
   settings = $state<Settings | null>(null);
   accounts = $state<AccountList>({ accounts: [], default: null });
+  memory = $state<MemoryProfile | null>(null);
   instances = $state<Instance[]>([]);
   versions = $state<string[]>([]);
   selected = $state<string | null>(null);
@@ -65,7 +66,8 @@ class Store {
       listen<ReportInfo>('report', (r) => (this.report = r)),
     ]);
     try {
-      const [info, settings] = await Promise.all([api.appInfo(), api.settingsGet()]);
+      const [info, settings, memory] = await Promise.all([api.appInfo(), api.settingsGet(), api.memoryProfile()]);
+      this.memory = memory;
       this.info = info;
       this.settings = settings;
       setLang(settings.language);

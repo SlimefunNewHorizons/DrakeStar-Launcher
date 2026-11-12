@@ -16,6 +16,8 @@ pub mod error;
 pub mod fabric;
 pub mod install;
 pub mod instances;
+pub mod importing;
+pub mod memory;
 pub mod java;
 pub mod launch;
 pub mod manifest;

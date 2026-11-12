@@ -193,6 +193,23 @@ fn instances_list(st: State<'_, AppState>) -> Vec<Instance> {
     Instances::new(&st.dirs).list()
 }
 #[tauri::command]
+fn memory_profile() -> drakestar_mc::memory::MemoryProfile {
+    drakestar_mc::memory::MemoryProfile::detect()
+}
+#[tauri::command]
+async fn instance_import_preview(st: State<'_, AppState>, source: String) -> Res<drakestar_mc::importing::Preview> {
+    let dirs = st.dirs.clone();
+    tauri::async_runtime::spawn_blocking(move || drakestar_mc::importing::preview(&dirs, std::path::Path::new(&source)).map_err(s)).await.map_err(s)?
+}
+#[tauri::command]
+async fn instance_import(st: State<'_, AppState>, source: String) -> Res<Instance> {
+    if st.busy.swap(true, Ordering::SeqCst) { return Err("Ya hay una partida o una importacion en curso.".into()); }
+    let dirs = st.dirs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || drakestar_mc::importing::import(&dirs, std::path::Path::new(&source)).map_err(s)).await.map_err(s);
+    st.busy.store(false, Ordering::SeqCst);
+    result?
+}
+#[tauri::command]
 fn instance_save(st: State<'_, AppState>, instance: Instance) -> Res<Instance> {
     Instances::new(&st.dirs).upsert(instance).map_err(s)
 }
@@ -461,7 +478,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info, settings_get, settings_set, accounts_list, account_add_offline, account_remove, account_set_default,
-            msa_start, msa_cancel, instances_list, instance_save, instance_delete, versions_supported,
+            msa_start, msa_cancel, instances_list, memory_profile, instance_import_preview, instance_import, instance_save, instance_delete, versions_supported,
             play, play_cancel, game_kill, logs_read, support_report, open_folder, open_url
         ])
         .run(tauri::generate_context!())

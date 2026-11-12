@@ -97,3 +97,38 @@ Probado sobre los archivos **publicados** (no solo sobre compilaciones locales):
 - **El juego se cierra al abrir**: *Registros → Juego*; el aviso ofrece desactivar Fused o enviar el reporte.
 - **Antivirus bloquea Java o el launcher**: añadir excepción a la carpeta de datos.
 - **Sin internet**: lo ya descargado funciona sin conexión (se omiten mods y comprobaciones y se avisa).
+
+## Importar instancias y elegir memoria
+
+En **Instancias → Importar instancia**, pega la ruta absoluta de una instancia o un
+archivo exportado y pulsa **Revisar**. Se muestran nombre, versión de Minecraft,
+loader y RAM antes de **Importar copia**.
+
+- **Prism / MultiMC:** carpeta con `mmc-pack.json` e `instance.cfg`, o ZIP exportado;
+  admite el directorio de juego `.minecraft/` y `minecraft/`.
+- **CurseForge:** carpeta de una instancia **ya instalada**, con
+  `minecraftinstance.json` y sus mods descargados. No admite el ZIP del catálogo
+  (`manifest.json`), que requiere resolver descargas de CurseForge.
+- **Modrinth:** archivo `.mrpack` exportado, con `modrinth.index.json`;
+  descarga archivos de cliente desde `https://cdn.modrinth.com/`, comprueba SHA-1 y
+  tamaño, y aplica `overrides/` seguido de `client-overrides/`. Omite archivos
+  exclusivos del servidor. Otros hosts de descarga se rechazan explícitamente.
+
+Solo admite **Vanilla y Fabric**, dentro del rango de Minecraft del launcher.
+Forge, NeoForge, Quilt y componentes Prism desconocidos se rechazan antes de
+crear una instancia. La versión de Fabric importada se conserva al jugar.
+
+Se copian mods, configuraciones, partidas, recursos, shaders, capturas, esquemas,
+scripts y opciones/servidores a una carpeta nueva `instances/importada-N`.
+La instancia original y las existentes se conservan. No se importan cuentas,
+logs, comandos de inicio ni argumentos JVM. Hay un límite de 4 GiB; se rechazan
+rutas absolutas, escapes de directorio, enlaces simbólicos y archivos especiales.
+Si falla la copia o una descarga, no se registra la instancia y se retiran los
+archivos parciales. Las importaciones no corren durante una partida.
+
+Las instancias nuevas e importadas reciben un presupuesto basado en la RAM física
+(Windows, macOS y Linux): la mitad del equipo, hasta 6 GiB recomendados. Por
+ejemplo, 4/8/16 GiB de RAM recomiendan 2/4/6 GiB de heap. El deslizador permite
+ajustarlo hasta la mitad de RAM (máximo 64 GiB); **Usar memoria recomendada**
+restaura el presupuesto. Las instancias guardadas conservan su ajuste manual.
+Este presupuesto es el heap del cliente: el servidor local también necesita RAM.

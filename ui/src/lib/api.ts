@@ -1,6 +1,6 @@
 // Capa de acceso al backend. Dentro de la app usa Tauri; en el navegador (npm run dev) usa datos de ejemplo
 // para poder revisar la interfaz sin compilar Rust.
-import type { Account, AccountList, AppInfo, DeviceCode, GameState, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
+import type { ImportPreview, MemoryProfile, Account, AccountList, AppInfo, DeviceCode, GameState, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -36,6 +36,9 @@ export const api = {
   setDefaultAccount: (id: string) => call<void>('account_set_default', { id }),
   msaStart: () => call<DeviceCode>('msa_start'),
   msaCancel: () => call<void>('msa_cancel'),
+  memoryProfile: () => call<MemoryProfile>('memory_profile'),
+  importPreview: (source: string) => call<ImportPreview>('instance_import_preview', { source }),
+  importInstance: (source: string) => call<Instance>('instance_import', { source }),
   instances: () => call<Instance[]>('instances_list'),
   saveInstance: (instance: Instance) => call<Instance>('instance_save', { instance }),
   deleteInstance: (id: string) => call<void>('instance_delete', { id }),
@@ -94,6 +97,9 @@ async function mock<T>(cmd: string, a: Record<string, any>): Promise<T> {
       return ok({ device_code: 'x', user_code: 'ABCD1234', verification_uri: 'https://www.microsoft.com/link', verification_uri_complete: null, interval: 5, expires_in: 900 });
     }
     case 'msa_cancel': return ok(undefined);
+    case 'memory_profile': return ok({ total_mb: 16384, recommended_mb: 6144, max_mb: 8192 });
+    case 'instance_import_preview':
+    case 'instance_import': throw new Error('La importación de archivos requiere la aplicación de escritorio.');
     case 'instances_list': return ok(mockState.instances);
     case 'instance_save': { const i = mockState.instances.findIndex((x) => x.id === a.instance.id); if (i >= 0) mockState.instances[i] = a.instance; else mockState.instances.push(a.instance); return ok(a.instance); }
     case 'instance_delete': mockState.instances = mockState.instances.filter((x) => x.id !== a.id); return ok(undefined);
