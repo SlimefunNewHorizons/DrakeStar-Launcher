@@ -32,7 +32,7 @@ Fabric instances also get Fabric API and, if enabled, the performance mods (Sodi
 
 ## Docs
 
-[Operations guide](docs/LAUNCHER.md) (accounts and Azure, reports, updates, releasing, Fused, Horizon) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+[Changelog](CHANGELOG.md) (Spanish) · [Operations guide](docs/LAUNCHER.md) (accounts and Azure, reports, updates, releasing, Fused, Horizon) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
 
 ## Development
 

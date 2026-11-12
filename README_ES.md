@@ -32,7 +32,7 @@ Fabric instala además Fabric API y, si lo activas, los mods de rendimiento (Sod
 
 ## Documentación
 
-[Guía de operación](docs/LAUNCHER.md) (cuentas y Azure, reportes, actualizaciones, publicación, Fused, Horizon) · [Arquitectura](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Marca](docs/BRANDING.md)
+[Novedades](CHANGELOG.md) · [Guía de operación](docs/LAUNCHER.md) (cuentas y Azure, reportes, actualizaciones, publicación, Fused, Horizon) · [Arquitectura](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Marca](docs/BRANDING.md)
 
 ## Desarrollo
 

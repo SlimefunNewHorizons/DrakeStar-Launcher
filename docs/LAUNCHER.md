@@ -47,7 +47,7 @@ El `.msi` instala por equipo (pide administrador al actualizar); el `.exe` (NSIS
 
 ## DrakeStar Fused (1.20 a 26.2)
 
-Repo `drakestar-fused`. Desde la **1.0.0-alpha.3** es un solo `.jar` de Fabric **sin mixins** (usa los eventos `SERVER_STARTING/STOPPING` de Fabric API, que no dependen de los nombres internos de Minecraft), así que sirve igual en versiones ofuscadas (1.20 a 1.21.11) y no ofuscadas (26.x). Probado con el launcher en **1.20.1, 1.21.1, 1.21.11, 26.1 y 26.2** (carga, menú y creación de mundo en 1.21.1). Las alpha.1 y alpha.2 usaban mixins sin remapear y **tumban el juego al arrancar**: el launcher las ignora y borra sus `.jar`. Estado real: prepara el entorno del servidor integrado (carpeta `plugins/`, puente Rust opcional) pero **el host Bukkit todavía no ejecuta plugins**; la interfaz lo marca como alfa. Publicar: subir `mod_version` en `gradle.properties` y empujar la etiqueta `vX.Y.Z` (el flujo compila, comprueba el jar con `release-artifacts/check_jar.py` y crea el release con `drakestar-fused-fabric-universal-<versión>.jar`). Hasta que exista un release válido, el launcher abre la instancia sin Fused y lo avisa.
+Repo `drakestar-fused`. Desde la **1.0.0-alpha.3** es un solo `.jar` de Fabric **sin mixins** (usa los eventos `SERVER_STARTING/STOPPING` de Fabric API, que no dependen de los nombres internos de Minecraft), así que sirve igual en versiones ofuscadas (1.20 a 1.21.11) y no ofuscadas (26.x). Probado con el launcher en **1.20.1, 1.21.1, 1.21.11, 26.1 y 26.2** (carga, menú y creación de mundo en 1.21.1). Las alpha.1 y alpha.2 usaban mixins sin remapear y **tumban el juego al arrancar**: el launcher las ignora y borra sus `.jar`. Estado real: prepara el entorno del servidor integrado (carpeta `plugins/`, puente Rust opcional) pero **el host Bukkit todavía no ejecuta plugins**; la interfaz lo marca como alfa. Publicar: subir `mod_version` en `gradle.properties` y empujar la etiqueta `vX.Y.Z` (el flujo compila, comprueba el jar con `release-artifacts/check_jar.py` y crea el release con `drakestar-fused-fabric-universal-<versión>.jar`). **Publicada: [v1.0.0-alpha.3](https://github.com/SlimefunNewHorizons/drakestar-fused/releases/tag/v1.0.0-alpha.3)**; el launcher la instala sola en las instancias con Fused (y borra los jars de las alpha.1/2). Si no hubiera ningún release válido, abre la instancia sin Fused y lo avisa.
 
 ## Horizon (cliente Rust, Minecraft 26.3)
 
@@ -57,7 +57,25 @@ No integrado. Su API de lanzamiento para launchers de terceros exige una app de 
 
 `tools/e2e/` trae los guiones usados para validar la app real sin pantalla (Xvfb + xdotool, p. ej. en WSL): arrancan la app Tauri compilada, hacen clic y capturan. Cuidado: Minecraft captura el puntero de X11 dentro de un mundo; pulsa `Escape` antes de hacer clic en el launcher. Pruebas de motor: `cargo test -p drakestar-mc` y `cargo run -p drakestar-mc --example play_test -- <mc> [vanilla|fabric] [segundos] [carpeta]`.
 
+## Verificación de la 0.6.0 (publicada el 2026-11-12)
+
+Probado sobre los archivos **publicados** (no solo sobre compilaciones locales):
+
+| Qué | Cómo | Resultado |
+|---|---|---|
+| Flujo de release | etiqueta `v0.6.0` → Linux, Windows y macOS en verde; `latest.json` con firma en 11 plataformas | ok |
+| Windows (`.msi`) | extraído con `msiexec /a` (sin instalar), WebView2 + `tools/e2e/cdp-shot.mjs`: bienvenida, cuenta sin premium, JUGAR → Minecraft 1.21.11 abierto, «Cerrar el juego» sin falso fallo (código 1 de `TerminateProcess`), «Buscar actualizaciones» → «Ya tienes la última versión» | ok |
+| Linux (`.AppImage`) | WSL2 + Xvfb: arranca y muestra la interfaz | ok |
+| Actualizador | app compilada con versión 0.5.99 detecta la 0.6.0 en el `latest.json` publicado (banner y botón «Actualizar y reiniciar») | detección ok |
+| Web | `POST /api/launcher/report` en producción → 202; el zip se lee desde Star (0644) | ok |
+| Fused | jar publicado verificado por SHA-256 y probado en 1.21.1 y 26.2 (antes, 1.20.1, 1.21.11 y 26.1) | ok |
+
+**No probado** (necesita máquinas limpias o cuentas reales): instalación real del `.msi`/`.exe` y del `.deb`/`.rpm`, macOS (`.dmg`, no está firmado ni notarizado), la **instalación** de una actualización (solo su detección) y el login de Microsoft completo (falta el client ID propio).
+
 ## Problemas frecuentes
+
+- **Windows SmartScreen avisa «editor desconocido»** al abrir el instalador: no está firmado con un certificado de editor (cuesta dinero). *Más información → Ejecutar de todas formas*. En macOS: clic derecho → *Abrir*.
+- **Instalaste con el `.msi` y quieres actualizar**: instala el `.msi` nuevo encima (mismo identificador, se reemplaza). Mezclar `.msi` y `.exe` en el mismo equipo deja dos instalaciones.
 
 - **No abre la ventana en Windows**: falta WebView2 (el instalador lo descarga; sin internet, instalar «WebView2 Runtime» de Microsoft).
 - **«Microsoft rechazó el client ID» / 403 Invalid app registration**: falta la app propia aprobada por Mojang (sección Azure).

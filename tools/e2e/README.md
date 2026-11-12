@@ -12,3 +12,7 @@ bash tools/e2e/xdo.sh "click 640 547;wait 1" bienvenida
 ```
 
 Notas: las capturas salen en `DS_SHOTS` (por defecto `/tmp`). Minecraft captura el puntero de X11 dentro de un mundo (no hay gestor de ventanas): pulsa `Escape` antes de hacer clic en el launcher.
+
+## Windows (WebView2)
+
+`cdp-shot.mjs` captura la interfaz de la app de Windows por el protocolo de depuracion de WebView2 (sin tocar el escritorio): ver la cabecera del archivo. Sirve para comprobar un instalador recien publicado sin instalarlo (extraer el `.msi` con `msiexec /a` si el sistema lo permite) y para ejecutar la app con datos aislados (`DRAKESTAR_DATA_DIR`).
