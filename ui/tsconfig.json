@@ -12,5 +12,5 @@
     "isolatedModules": true,
     "types": ["svelte", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "routes.json"]
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

@@ -1,7 +1,7 @@
 {
   "name": "drakestar-ui",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "sync-brand": "node scripts/sync-brand.mjs",
@@ -14,7 +14,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-process": "^2",
+    "@tauri-apps/plugin-updater": "^2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",
