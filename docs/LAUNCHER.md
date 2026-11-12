@@ -45,6 +45,21 @@ Plugin `tauri-plugin-updater`; endpoint `https://github.com/SlimefunNewHorizons/
 
 El `.msi` instala por equipo (pide administrador al actualizar); el `.exe` (NSIS, modo `both`) puede instalarse por usuario y no pide permisos: es el recomendado. El actualizador respeta el tipo con el que se instaló. WebView2 se descarga solo si falta (`downloadBootstrapper`).
 
+## Servidor local gestionado («Slimefun en solitario / LAN»)
+
+Destino de instancia `local` (`{ "kind": "local", "port": 25570, "lan": false }`). Al pulsar JUGAR el launcher prepara el servidor, lo arranca sin ventana, espera a que abra el puerto y lanza el cliente directo a `127.0.0.1:<puerto>`; al cerrar el juego (o el launcher) mata el servidor.
+
+- **26.x**: baja el último release estable de `SlimefunNewHorizons/DrakesPurpur` (`purpur-paperclip-*.jar`, ~95 MB, tamaño verificado). Es el **monolito**: Purpur + núcleo Drakes + 9 suites con Slimefun y los 94 addons; no se instalan plugins aparte. Java 25 gestionado, `--enable-native-access=ALL-UNNAMED`; el puente Rust viene apagado por defecto en el kernel (con respaldo en Java).
+- **Antes de 26**: Purpur (API de PurpurMC, MD5 verificado) + `Slimefun-*-<mc>-SNAPSHOT.jar` de Slimefun4-Drake si existe para esa versión (si no, avisa y abre sin Slimefun).
+- Carpeta: `<root>/instances/<id>/server/` (mundo, `plugins/`, `server.properties`). Se impone `server-port`, `server-ip` (127.0.0.1 salvo `lan`), `online-mode=false`; el resto de `server.properties` se respeta. Se escribe `eula=true` (la nota de la instancia avisa de que jugar implica aceptar el EULA de Mojang).
+- RAM: el servidor usa la mitad de la memoria de la instancia (mín. 3 GB en monolito, 1,5 GB en Purpur). Registro: `server/logs/launcher-server.log`.
+- Plantillas antiguas «Slimefun solitario» con Fused en el menú migran solas a esta.
+- No probado aún con un jugador real desde la interfaz; sí el arranque del monolito (`Done` en ~22 s) y de Purpur 1.21.11 + Slimefun.
+
+## Por qué Fused no es el camino para Slimefun
+
+Un Bukkit dentro del servidor integrado no cubre el objetivo (Fabric, Forge y NeoForge, 1.20 a 26.2, monolito y optimizaciones Rust del núcleo): Cardboard es solo Fabric 1.21.x (probado en 1.21.11: carga, pero Slimefun falla al crear cabezas de jugador, `CustomGameProfile.apply`), Arclight llega a 1.21.1, y las optimizaciones viven en el núcleo de DrakesPurpur. Por eso se ejecuta el DrakesPurpur real aparte y automático. Fused queda como mod opcional alfa.
+
 ## DrakeStar Fused (1.20 a 26.2)
 
 Repo `drakestar-fused`. Desde la **1.0.0-alpha.3** es un solo `.jar` de Fabric **sin mixins** (usa los eventos `SERVER_STARTING/STOPPING` de Fabric API, que no dependen de los nombres internos de Minecraft), así que sirve igual en versiones ofuscadas (1.20 a 1.21.11) y no ofuscadas (26.x). Probado con el launcher en **1.20.1, 1.21.1, 1.21.11, 26.1 y 26.2** (carga, menú y creación de mundo en 1.21.1). Las alpha.1 y alpha.2 usaban mixins sin remapear y **tumban el juego al arrancar**: el launcher las ignora y borra sus `.jar`. Estado real: prepara el entorno del servidor integrado (carpeta `plugins/`, puente Rust opcional) pero **el host Bukkit todavía no ejecuta plugins**; la interfaz lo marca como alfa. Publicar: subir `mod_version` en `gradle.properties` y empujar la etiqueta `vX.Y.Z` (el flujo compila, comprueba el jar con `release-artifacts/check_jar.py` y crea el release con `drakestar-fused-fabric-universal-<versión>.jar`). **Publicada: [v1.0.0-alpha.3](https://github.com/SlimefunNewHorizons/drakestar-fused/releases/tag/v1.0.0-alpha.3)**; el launcher la instala sola en las instancias con Fused (y borra los jars de las alpha.1/2). Si no hubiera ningún release válido, abre la instancia sin Fused y lo avisa.

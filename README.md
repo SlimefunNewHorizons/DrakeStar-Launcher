@@ -19,7 +19,7 @@ DrakeStar **updates itself** (signed releases): it checks on start and from *Set
 ## Use
 
 1. **Accounts**: sign in with Microsoft (your browser opens by itself; type the code only if asked) or add an offline account. Keep as many of each as you want and pick which one to play with.
-2. **Pick what to play**: *DrakesCraft (online)*, *Slimefun single-player / LAN*, *Vanilla* or your own instance (version, Fabric or vanilla, memory, performance mods).
+2. **Pick what to play**: *DrakesCraft (online)*, *Slimefun single-player / LAN* (starts the DrakesPurpur monolith on your PC and joins it; 26.2, Java 25, ~8 GB free RAM), *Vanilla* or your own instance (version, Fabric or vanilla, memory, performance mods).
 3. **PLAY**. The first time it downloads Java and the game files; afterwards it opens in seconds.
 
 Fabric instances also get Fabric API and, if enabled, the performance mods (Sodium, Lithium, FerriteCore, ImmediatelyFast, Entity Culling) and **DrakeStar Fused** (alpha: one `.jar` for 1.20 to 26.2).

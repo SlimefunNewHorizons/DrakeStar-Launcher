@@ -25,6 +25,7 @@ crates/drakestar-net  (descargas https con SHA-256 en streaming)
 | Módulo | Rol |
 |---|---|
 | `manifest`, `version` | manifiesto de Mojang (1.20 a 26.2), reglas de librerías/argumentos, `inheritsFrom` de Fabric |
+| `server` | servidor local gestionado (DrakesPurpur 26.x / Purpur + Slimefun): descarga, `server.properties`, plan de arranque, espera de puerto |
 | `install`, `assets`, `java`, `fabric`, `mods` | descargas verificadas (SHA-1/256/512), JRE Temurin por versión, perfil Fabric, Modrinth, Fused |
 | `launch`, `play` | plan de argumentos y proceso del juego, preparación completa |
 | `msa`, `accounts`, `offline` | login de Microsoft por código de dispositivo, varias cuentas, tokens aparte (`secrets.json`), UUID sin premium |
