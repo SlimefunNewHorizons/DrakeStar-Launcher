@@ -8,3 +8,8 @@ src-tauri/gen/
 .env
 *.log
 graphify-out/
+
+# claves de firma del updater (NUNCA se versionan)
+*.key
+updater.key*
+.drakestar-keys/

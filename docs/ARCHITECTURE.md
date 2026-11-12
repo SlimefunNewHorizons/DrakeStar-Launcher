@@ -1,57 +1,44 @@
 # Arquitectura
 
-## Decisión de stack (recomendada)
-
-| Capa | Elección | Por qué |
-|---|---|---|
-| Núcleo y servicios | **Rust** (`drakestar-core`, crates de I/O) | descargas, hashes, procesos, perfiles: Rust aporta seguridad y un binario único |
-| Shell/UI | **Tauri 2 + Svelte/TypeScript** | UI moderna y ligera, SVG nativo para la marca; no arrastra un Chromium propio como Electron |
-| Java | **procesos externos** (JRE gestionado, 21/25) | los mods Java necesitan JVM; se administra, no se incrusta |
-| Servidor | JAR de DrakesPurpur como subproceso | aislamiento; un crash no tumba el launcher |
-| Cliente Rust | binario gestionado (sin decidir si Horizon-fork o propio) | decisión abierta, ver abajo |
-
-*Alternativa descartada por ahora:* UI nativa 100 % Rust (egui/iced): más control, pero peor para una marca visual rica. Se reevalúa si Tauri molesta.
-
-> El stack recomendado **está implementado** (alfa): Tauri 2 + Svelte 5/TypeScript.
-
-## Capas
+DrakeStar es un launcher de Minecraft: **Tauri 2 (Rust) + Svelte 5**. Toda la lógica de juego vive en Rust y no depende de Tauri; la interfaz solo refleja el estado.
 
 ```
-UI (Svelte)  ──invoke / evento proc-event──▶  src-tauri (glue, sin logica)
-                                                   │
-                                            drakestar-app  (sin Tauri; todo testeable)
-                                   store · process · server · instances · release · ping · java
-                                      │                       │
-                                drakestar-core          drakestar-net
-                          perfiles, canales, manifiesto,   descarga https + SHA-256
-                          plan, compat (verdad)
+ui/  (Svelte 5 + TypeScript)
+  App · views (Jugar, Cuentas, Instancias, Ajustes, Registros) · components · lib/store.svelte.ts · lib/api.ts
+     │  invoke(comando) / eventos: progress, game-state, game-line, msa, report
+     ▼
+src-tauri/  (glue: comandos, eventos, actualizador, abrir navegador/carpetas)
+     ▼
+crates/drakestar-mc  (motor, sin Tauri, 24 pruebas)
+  manifest · version · install · assets · java · fabric · mods · launch · play
+  msa · accounts · offline · instances · settings · support
+     ▼
+crates/drakestar-net  (descargas https con SHA-256 en streaming)
 ```
 
-`drakestar-core` es puro y determinista. Nada depende hacia arriba. El gestor de procesos (planeado antes como `drakestar-proc`) vive en `drakestar-app::process` y emite eventos a un `EventSink`; `src-tauri` los reenvía a la UI como `proc-event`.
+## Flujo de JUGAR (`play::prepare` + `launch::spawn`)
 
-**Una sola fuente de verdad de compatibilidad:** la UI no duplica reglas. Pide `compat_report` (que serializa `drakestar_core::compat`) y valida cada perfil en vivo con `validate_profile` (`Profile::validate`). El backend es la autoridad: un perfil `drakes-rust` con loader o modpack se rechaza al guardar e importar. (El *mock* del modo navegador sí duplica reglas a mano; por eso se marca en pantalla.)
+`cuenta → sesión` (refresca el token de Microsoft si hace falta) → `install` (JSON de versión + librerías + natives + assets, todo verificado) → `java::ensure` (JRE gestionado) → mods (Fabric API, rendimiento, Fused) → `options.txt` inicial → `launch::plan` (argumentos JVM/juego, quickPlay) → `spawn` (salida en vivo, token tachado, `launcher-session.log`). Cerrar el juego desde el launcher no cuenta como fallo (`AppState.closing`).
 
-## Estructura del repositorio
+## Módulos del motor
 
-```
-crates/drakestar-core   modelo + logica pura                      (implementado)
-crates/drakestar-cli    validacion y planes                       (implementado)
-crates/drakestar-net    descarga + SHA-256                        (implementado)
-crates/drakestar-app    perfiles, procesos, servidor, instancias  (implementado)
-src-tauri/              comandos IPC (Tauri 2)                    (implementado, alfa)
-ui/                     Svelte + TS + Vite, routes.json           (implementado, alfa)
-schemas/                JSON Schema de perfil y manifiesto
-assets/brand/           SVG de marca (generados)
-tools/                  gen_brand.py, screenshots.cjs
-docs/  examples/  .github/workflows/ci.yml
-```
+| Módulo | Rol |
+|---|---|
+| `manifest`, `version` | manifiesto de Mojang (1.20 a 26.2), reglas de librerías/argumentos, `inheritsFrom` de Fabric |
+| `install`, `assets`, `java`, `fabric`, `mods` | descargas verificadas (SHA-1/256/512), JRE Temurin por versión, perfil Fabric, Modrinth, Fused |
+| `launch`, `play` | plan de argumentos y proceso del juego, preparación completa |
+| `msa`, `accounts`, `offline` | login de Microsoft por código de dispositivo, varias cuentas, tokens aparte (`secrets.json`), UUID sin premium |
+| `instances`, `settings` | instancias y plantillas, ajustes (idioma, privacidad, client ID) |
+| `support` | registros con rotación, tachador de datos personales, paquete de reporte y envío |
 
-## Integraciones
+## Crates heredados
 
-- **DrakesPurpur:** `launch::local_server_plan` (usado por `Service::server_start`) produce `java -Xms/-Xmx --enable-native-access=ALL-UNNAMED -jar drakespurpur.jar --nogui` en `profiles/<id>/server`. Java requerido: 25 para MC 26.x. El preset Slimefun (plugins a copiar) sigue por definir y debe salir de artefactos verificados; hoy los plugins se copian a mano a `plugins/`. El servidor se detiene enviando `stop` por stdin y, pasados 30 s, con kill. No se ha probado contra un JAR real de DrakesPurpur.
-- **Cliente Rust:** decisión abierta. Opciones: (a) *fork* de Horizon (MIT; hoy 26.3/protocolo 777, con adaptador a 26.2 solo en el cliente), (b) cliente propio. Criterio: demostrar conexión a un DrakesPurpur 26.2 y comportamiento de inventarios de Slimefun antes de prometer nada.
-- **Clientes Java:** descarga de versión + loader, JRE adecuado, argumentos JVM; los modpacks se resuelven en el launcher y se lanzan con JVM externa.
+`drakestar-core`, `drakestar-app`, `drakestar-cli`, `drakestar-rust-client`, `drakestar-native-example` son del diseño anterior (perfiles, servidor local DrakesPurpur, cliente Rust de Horizon). **La app ya no los usa**; siguen en el workspace y en CI hasta decidir su destino (el cliente Rust volverá cuando exista la integración con Horizon, ver [LAUNCHER.md](LAUNCHER.md#horizon-cliente-rust-minecraft-263)).
 
 ## Seguridad
 
-Artefactos solo con SHA-256 válido (`sha256_wellformed`), manifiestos versionados por esquema, sin ejecutar nada descargado sin verificar, sin tocar servidores remotos. Firmado de manifiestos: pendiente.
+- Todo archivo descargado se verifica con su hash; los mods de Modrinth con SHA-512; Java con SHA-256.
+- El actualizador solo instala versiones firmadas con la clave minisign del proyecto.
+- Tokens de Microsoft solo en `accounts/secrets.json` (permisos 0600 en Unix) y tachados de cualquier salida.
+- Reportes: https obligatorio, tope de 6 MB y datos personales tachados antes de salir del equipo; se pueden desactivar.
+- CSP de la ventana: solo recursos propios y los avatares de `mc-heads.net` / `minotar.net`.
