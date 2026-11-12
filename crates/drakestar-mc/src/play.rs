@@ -24,7 +24,16 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
 
     // 1) cuenta primero: si falla el login no vale la pena bajar 400 MB
     sink.stage("account", "Comprobando tu cuenta");
-    let session = Accounts::new(d).session(account_id, client_id)?;
+    let session = match Accounts::new(d).session(account_id, client_id) {
+        Ok(s) => s,
+        // sin internet: se juega en solitario con el nombre y el UUID de la cuenta (los servidores no dejaran entrar)
+        Err(McError::Net(_)) => {
+            let acc = Accounts::new(d).get(account_id).ok_or_else(|| McError::NotFound(format!("cuenta {account_id}")))?;
+            warnings.push("Sin conexion con Microsoft: juegas en solitario con el nombre de tu cuenta; los servidores no te dejaran entrar.".into());
+            Session { name: acc.name, uuid: acc.uuid, access_token: "0".into(), user_type: "legacy".into(), xuid: None, client_id: None }
+        }
+        Err(e) => return Err(e),
+    };
 
     // 2) version (+ loader)
     let version_id = match inst.loader {
@@ -50,21 +59,30 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
     if inst.loader == Loader::Fabric {
         sink.stage("mods", "Instalando mods");
         let mods_dir = game_dir.join("mods");
-        mods::ensure_fabric_api(&mods_dir, &inst.mc)?;
-        if inst.performance {
+        let mut offline = false;
+        match mods::ensure_fabric_api(&mods_dir, &inst.mc) {
+            Ok(_) => {}
+            // sin conexion: si Fabric API ya esta instalado se sigue con los mods que hay
+            Err(McError::Net(_)) if has_jar(&mods_dir, "fabric-api-") => {
+                offline = true;
+                warnings.push("Sin conexion: se usan los mods ya instalados.".into());
+            }
+            Err(e) => return Err(e),
+        }
+        if inst.performance && !offline {
             let ok = mods::ensure_performance(&mods_dir, &inst.mc, &|l| sink.log(l));
             if ok.len() < mods::PERFORMANCE_SET.len() {
                 warnings.push(format!("Solo {} de {} mods de rendimiento existen para Minecraft {}.", ok.len(), mods::PERFORMANCE_SET.len(), inst.mc));
             }
         }
-        if inst.fused {
+        if !inst.fused {
+            mods::remove_fused(&mods_dir);
+        } else if !offline {
             match mods::ensure_fused(&mods_dir, &inst.mc, "fabric") {
                 Ok(Some(_)) => {}
                 Ok(None) => warnings.push(format!("DrakeStar Fused aun no tiene una version publicada para Minecraft {}: se abre sin Fused.", inst.mc)),
                 Err(e) => warnings.push(format!("No se pudo instalar DrakeStar Fused: {e}")),
             }
-        } else {
-            mods::remove_fused(&mods_dir);
         }
     }
 
@@ -78,4 +96,8 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
     }
     let plan = launch::plan(d, &installed, &session, &o)?;
     Ok(Prepared { plan, session, game_dir, warnings, java_major: installed.java_major, version_id })
+}
+
+fn has_jar(dir: &std::path::Path, prefix: &str) -> bool {
+    std::fs::read_dir(dir).map(|rd| rd.flatten().any(|e| e.file_name().to_string_lossy().starts_with(prefix))).unwrap_or(false)
 }

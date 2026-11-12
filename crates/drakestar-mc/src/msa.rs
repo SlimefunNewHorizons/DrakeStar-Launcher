@@ -140,6 +140,7 @@ pub fn poll(client_id: &str, device_code: &str) -> McResult<Poll> {
         Err((_, v)) => match v["error"].as_str().unwrap_or("") {
             "authorization_pending" => Ok(Poll::Pending(v["interval"].as_u64().unwrap_or(5).max(5))),
             "slow_down" => Ok(Poll::Pending(v["interval"].as_u64().unwrap_or(10).max(10))),
+            "network" => Ok(Poll::Pending(5)), // corte de red pasajero: se sigue sondeando hasta que caduque el codigo
             "authorization_declined" => Err(McError::Invalid("rechazaste el acceso en Microsoft".into())),
             "expired_token" | "bad_verification_code" => Err(McError::Invalid("el codigo caduco: vuelve a iniciar el login".into())),
             other => Err(McError::Invalid(format!("Microsoft: {other} {}", v["error_description"].as_str().unwrap_or("")))),
@@ -149,7 +150,10 @@ pub fn poll(client_id: &str, device_code: &str) -> McResult<Poll> {
 
 pub fn refresh(client_id: &str, refresh_token: &str) -> McResult<MsaTokens> {
     let v = form(TOKEN, &[("grant_type", "refresh_token"), ("refresh_token", refresh_token), ("client_id", client_id), ("scope", SCOPE)])
-        .map_err(|(_, v)| McError::Invalid(format!("la sesion de Microsoft caduco, vuelve a iniciar sesion ({})", v["error"].as_str().unwrap_or("?"))))?;
+        .map_err(|(_, v)| match v["error"].as_str().unwrap_or("?") {
+            "network" => McError::Net("sin conexion con Microsoft: revisa tu internet".into()),
+            e => McError::Invalid(format!("la sesion de Microsoft caduco, vuelve a iniciar sesion ({e})")),
+        })?;
     let mut t = tokens(&v)?;
     if t.refresh_token.is_empty() {
         t.refresh_token = refresh_token.into();
