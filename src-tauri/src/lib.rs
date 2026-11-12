@@ -1,525 +1,417 @@
-//! Glue de Tauri: cada comando delega en `drakestar-app`. La logica (y sus tests)
-//! vive en `crates/drakestar-app`, que no depende de Tauri.
+//! DrakeStar: launcher de Minecraft. Esta capa solo conecta la interfaz con `drakestar-mc` (que no depende de Tauri).
+//!
+//! Eventos hacia la UI: `progress` (etapa y fraccion), `game-line` (salida del juego), `game-state`, `msa` (login Microsoft),
+//! `report` (reporte de error enviado).
 
-use drakestar_app::{
-    compat_report::{self, ModeCompat},
-    instances::{self, InstanceInfo, LogFile},
-    java::{self, JavaInfo},
-    fabric::ClientStatus,
-    mods,
-    modsync::{self, ConflictReport, DeltaSyncPlan, DeltaSyncResult, ServerModManifest},
-    ping::{self, ServerStatusPing},
-    process::{EventSink, LineRec, ProcEvent, ProcStatus},
-    release::{self, Resolution},
-    rustclient::RustClientStatus,
-    server::{PluginInfo, Prop, ServerStatus, WorldInfo},
-    service::Service,
-    settings::Settings,
-    store::ProfileList,
-    Layout,
-};
-use drakestar_core::{Mode, Profile};
+use drakestar_mc::accounts::{Account, AccountList, Accounts};
+use drakestar_mc::instances::{Instance, Instances};
+use drakestar_mc::launch::{self, GameHandle};
+use drakestar_mc::msa::{self, DeviceCode, Poll};
+use drakestar_mc::progress::CancelFlag;
+use drakestar_mc::settings::Settings;
+use drakestar_mc::{manifest, play, support, Dirs, ProgressSink};
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 type Res<T> = Result<T, String>;
 fn s<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-struct TauriSink(AppHandle);
-impl EventSink for TauriSink {
-    fn emit(&self, ev: ProcEvent) {
-        let _ = self.0.emit("proc-event", ev);
-    }
+struct AppState {
+    dirs: Dirs,
+    cancel: Mutex<CancelFlag>,
+    game: Mutex<Option<GameHandle>>,
+    login_cancel: Mutex<Option<Arc<AtomicBool>>>,
+    busy: AtomicBool,
+    /// El jugador cerro el juego desde el launcher: no cuenta como fallo.
+    closing: AtomicBool,
 }
 
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Res<T> {
-    tauri::async_runtime::spawn_blocking(f).await.map_err(s)
+#[derive(Serialize, Clone)]
+struct Progress {
+    stage: String,
+    text: String,
+    fraction: f32,
+}
+
+struct Sink {
+    app: AppHandle,
+    dirs: Dirs,
+    cancel: CancelFlag,
+    cur: Mutex<(String, String)>,
+}
+
+impl ProgressSink for Sink {
+    fn stage(&self, id: &str, text: &str) {
+        *self.cur.lock().unwrap() = (id.into(), text.into());
+        support::app_log(&self.dirs, "INFO", &format!("[{id}] {text}"));
+        let _ = self.app.emit("progress", Progress { stage: id.into(), text: text.into(), fraction: 0.0 });
+    }
+    fn fraction(&self, f: f32) {
+        let (st, tx) = self.cur.lock().unwrap().clone();
+        let _ = self.app.emit("progress", Progress { stage: st, text: tx, fraction: f });
+    }
+    fn log(&self, line: &str) {
+        support::app_log(&self.dirs, "INFO", line);
+    }
+    fn cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
+    }
 }
 
 #[derive(Serialize)]
 struct AppInfo {
-    name: &'static str,
     version: &'static str,
     data_dir: String,
-    platform: String,
-    /// Siempre true aqui: distingue el backend real del mock del modo navegador.
-    backend: &'static str,
+    os: &'static str,
+    arch: &'static str,
+    min_mc: &'static str,
+    max_mc: &'static str,
+    client_id_temporary: bool,
 }
 
 #[tauri::command]
-fn app_info(svc: State<'_, Service>) -> AppInfo {
+fn app_info(st: State<'_, AppState>) -> AppInfo {
     AppInfo {
-        name: "DrakeStar",
         version: env!("CARGO_PKG_VERSION"),
-        data_dir: svc.layout.root().to_string_lossy().to_string(),
-        platform: release::platform(),
-        backend: "tauri",
+        data_dir: st.dirs.root().to_string_lossy().to_string(),
+        os: drakestar_mc::os_name(),
+        arch: drakestar_mc::arch_name(),
+        min_mc: manifest::MIN_SUPPORTED,
+        max_mc: manifest::MAX_SUPPORTED,
+        client_id_temporary: Settings::load(&st.dirs).client_id_is_temporary(),
     }
-}
-
-#[tauri::command]
-fn compat_report() -> Vec<ModeCompat> {
-    compat_report::report()
-}
-
-// ---------- perfiles ----------
-#[tauri::command]
-fn list_profiles(svc: State<'_, Service>) -> ProfileList {
-    svc.store.list()
-}
-#[tauri::command]
-fn validate_profile(profile: Profile) -> Option<String> {
-    profile.validate().err().map(|e| e.to_string())
-}
-#[tauri::command]
-fn create_profile(svc: State<'_, Service>, profile: Profile) -> Res<Profile> {
-    svc.create_profile(&profile).map_err(s)?;
-    Ok(profile)
-}
-#[tauri::command]
-fn update_profile(svc: State<'_, Service>, profile: Profile) -> Res<Profile> {
-    svc.store.update(&profile).map_err(s)?;
-    drakestar_app::instances::ensure_dirs(&svc.layout, &profile).map_err(s)?;
-    Ok(profile)
-}
-#[tauri::command]
-fn delete_profile(svc: State<'_, Service>, id: String, remove_data: bool) -> Res<()> {
-    svc.delete_profile(&id, remove_data).map_err(s)
-}
-#[tauri::command]
-fn duplicate_profile(svc: State<'_, Service>, id: String, new_id: String, new_name: String) -> Res<Profile> {
-    let p = svc.store.duplicate(&id, &new_id, &new_name).map_err(s)?;
-    instances::ensure_dirs(&svc.layout, &p).map_err(s)?;
-    Ok(p)
-}
-#[tauri::command]
-fn import_profile(svc: State<'_, Service>, json: String, overwrite: bool) -> Res<Profile> {
-    let p = svc.store.import_json(&json, overwrite).map_err(s)?;
-    instances::ensure_dirs(&svc.layout, &p).map_err(s)?;
-    Ok(p)
-}
-#[tauri::command]
-fn export_profile(svc: State<'_, Service>, id: String) -> Res<String> {
-    svc.store.export_json(&id).map_err(s)
-}
-#[tauri::command]
-fn export_profile_file(svc: State<'_, Service>, id: String) -> Res<String> {
-    Ok(svc.store.export_to_file(&id).map_err(s)?.to_string_lossy().to_string())
 }
 
 // ---------- ajustes ----------
 #[tauri::command]
-fn get_settings(svc: State<'_, Service>) -> Settings {
-    svc.settings()
+fn settings_get(st: State<'_, AppState>) -> Settings {
+    Settings::load(&st.dirs)
 }
 #[tauri::command]
-fn set_settings(svc: State<'_, Service>, settings: Settings) -> Res<Settings> {
-    settings.save(&svc.layout).map_err(s)?;
+fn settings_set(st: State<'_, AppState>, settings: Settings) -> Res<Settings> {
+    settings.save(&st.dirs).map_err(s)?;
     Ok(settings)
 }
 
-// ---------- autenticación Microsoft (OAuth 2.0 Device Code) ----------
+// ---------- cuentas ----------
 #[tauri::command]
-async fn msft_login_start() -> Res<drakestar_rust_client::auth::DeviceCodeAuth> {
-    blocking(|| drakestar_rust_client::auth::request_device_code().map_err(s)).await?
+fn accounts_list(st: State<'_, AppState>) -> AccountList {
+    Accounts::new(&st.dirs).list()
+}
+#[tauri::command]
+fn account_add_offline(st: State<'_, AppState>, name: String) -> Res<Account> {
+    Accounts::new(&st.dirs).add_offline(name.trim()).map_err(s)
+}
+#[tauri::command]
+fn account_remove(st: State<'_, AppState>, id: String) -> Res<()> {
+    Accounts::new(&st.dirs).remove(&id).map_err(s)
+}
+#[tauri::command]
+fn account_set_default(st: State<'_, AppState>, id: String) -> Res<()> {
+    Accounts::new(&st.dirs).set_default(&id).map_err(s)
 }
 
+#[derive(Serialize, Clone)]
+struct MsaEvent {
+    phase: &'static str,
+    message: String,
+    account: Option<Account>,
+}
+
+/// Inicia el login de Microsoft: devuelve el codigo, abre el navegador solo y sondea en segundo plano (evento `msa`).
 #[tauri::command]
-async fn msft_login_poll(
-    svc: State<'_, Service>,
-    device_code: String,
-) -> Res<drakestar_rust_client::auth::PollResult> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let res = drakestar_rust_client::auth::poll_device_code(&device_code).map_err(s)?;
-        if let drakestar_rust_client::auth::PollResult::Success(ref session) = res {
-            let mut st = svc.settings();
-            st.session_uuid = Some(session.uuid.clone());
-            st.session_token = Some(session.access_token.clone());
-            st.session_name = Some(session.name.clone());
-            st.save(&svc.layout).map_err(s)?;
+async fn msa_start(app: AppHandle, st: State<'_, AppState>) -> Res<DeviceCode> {
+    let dirs = st.dirs.clone();
+    let client_id = Settings::load(&dirs).client_id();
+    let cid = client_id.clone();
+    let dc = tauri::async_runtime::spawn_blocking(move || msa::start(&cid)).await.map_err(s)?.map_err(s)?;
+    let url = dc.verification_uri_complete.clone().unwrap_or_else(|| dc.verification_uri.clone());
+    let _ = app.opener().open_url(&url, None::<&str>);
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    *st.login_cancel.lock().unwrap() = Some(cancel.clone());
+    let (code, interval, expires) = (dc.device_code.clone(), dc.interval, dc.expires_in);
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let emit = |phase: &'static str, message: String, account: Option<Account>| {
+            let _ = app2.emit("msa", MsaEvent { phase, message, account });
+        };
+        let started = std::time::Instant::now();
+        let mut wait = interval;
+        loop {
+            if cancel.load(Ordering::SeqCst) {
+                return emit("cancelled", "Login cancelado".into(), None);
+            }
+            if started.elapsed().as_secs() > expires {
+                return emit("error", "El codigo caduco: vuelve a intentarlo.".into(), None);
+            }
+            std::thread::sleep(std::time::Duration::from_secs(wait));
+            match msa::poll(&client_id, &code) {
+                Ok(Poll::Pending(n)) => wait = n,
+                Ok(Poll::Done(t)) => {
+                    emit("working", "Verificando tu cuenta de Minecraft...".into(), None);
+                    return match msa::minecraft_profile(&t.access_token).and_then(|p| Accounts::new(&dirs).add_microsoft(&p, &t.refresh_token)) {
+                        Ok(acc) => {
+                            support::app_log(&dirs, "INFO", &format!("cuenta Microsoft agregada: {}", acc.name));
+                            emit("success", format!("Sesion iniciada como {}", acc.name), Some(acc))
+                        }
+                        Err(e) => {
+                            support::app_log(&dirs, "ERROR", &format!("login Microsoft: {e}"));
+                            emit("error", e.to_string(), None)
+                        }
+                    };
+                }
+                Err(e) => return emit("error", e.to_string(), None),
+            }
         }
-        Ok(res)
-    })
-    .await?
+    });
+    Ok(dc)
 }
 
 #[tauri::command]
-fn msft_logout(svc: State<'_, Service>) -> Res<Settings> {
-    let mut st = svc.settings();
-    st.session_uuid = None;
-    st.session_token = None;
-    st.session_name = None;
-    st.save(&svc.layout).map_err(s)?;
-    Ok(st)
-}
-#[tauri::command]
-async fn detect_java(svc: State<'_, Service>) -> Res<JavaInfo> {
-    let bin = svc.settings().java_bin();
-    blocking(move || java::detect(&bin)).await
-}
-#[derive(Serialize)]
-struct JavaCheck {
-    info: JavaInfo,
-    warning: Option<String>,
-}
-/// Detecta Java y avisa si no alcanza lo que pide el perfil (local-server/clientes).
-#[tauri::command]
-async fn java_check(svc: State<'_, Service>, id: String) -> Res<JavaCheck> {
-    let p = svc.store.get(&id).map_err(s)?;
-    let bin = svc.settings().java_bin();
-    blocking(move || {
-        let info = java::detect(&bin);
-        let warning = java::compatibility_warning(&info, &p.minecraft, p.java.major);
-        JavaCheck { info, warning }
-    })
-    .await
+fn msa_cancel(st: State<'_, AppState>) {
+    if let Some(c) = st.login_cancel.lock().unwrap().take() {
+        c.store(true, Ordering::SeqCst);
+    }
 }
 
 // ---------- instancias ----------
-#[derive(Serialize)]
-struct InstanceRow {
-    profile: Profile,
-    info: InstanceInfo,
-    status: ProcStatus,
+#[tauri::command]
+fn instances_list(st: State<'_, AppState>) -> Vec<Instance> {
+    Instances::new(&st.dirs).list()
 }
 #[tauri::command]
-async fn list_instances(svc: State<'_, Service>) -> Res<Vec<InstanceRow>> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        svc.store
-            .list()
-            .profiles
-            .into_iter()
-            .map(|p| InstanceRow { info: instances::info(&svc.layout, &p), status: svc.procs.status(&p.id), profile: p })
-            .collect()
+fn instance_save(st: State<'_, AppState>, instance: Instance) -> Res<Instance> {
+    Instances::new(&st.dirs).upsert(instance).map_err(s)
+}
+#[tauri::command]
+fn instance_delete(st: State<'_, AppState>, id: String) -> Res<()> {
+    Instances::new(&st.dirs).remove(&id).map_err(s)
+}
+#[tauri::command]
+async fn versions_supported(st: State<'_, AppState>) -> Res<Vec<String>> {
+    let dirs = st.dirs.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let m = manifest::load(&dirs).map_err(s)?;
+        Ok(manifest::supported_releases(&m).into_iter().map(|e| e.id.clone()).collect())
     })
     .await
-}
-#[tauri::command]
-fn ensure_instance(svc: State<'_, Service>, id: String) -> Res<()> {
-    let p = svc.store.get(&id).map_err(s)?;
-    instances::ensure_dirs(&svc.layout, &p).map_err(s)
-}
-#[tauri::command]
-fn list_logs(svc: State<'_, Service>, id: String) -> Res<Vec<LogFile>> {
-    let p = svc.store.get(&id).map_err(s)?;
-    Ok(instances::list_logs(&svc.layout, &p))
-}
-#[tauri::command]
-fn read_log(svc: State<'_, Service>, id: String, source: String, name: String, max_lines: usize) -> Res<Vec<String>> {
-    let p = svc.store.get(&id).map_err(s)?;
-    instances::read_log_tail(&svc.layout, &p, &source, &name, max_lines.min(5000)).map_err(s)
-}
-#[tauri::command]
-fn clear_logs(svc: State<'_, Service>, id: String) -> Res<usize> {
-    let p = svc.store.get(&id).map_err(s)?;
-    instances::clear_launcher_logs(&svc.layout, &p).map_err(s)
+    .map_err(s)?
 }
 
-// ---------- procesos / consola ----------
-#[tauri::command]
-fn server_start(svc: State<'_, Service>, id: String) -> Res<ProcStatus> {
-    svc.server_start(&id).map_err(s)
-}
-#[tauri::command]
-fn server_stop(svc: State<'_, Service>, id: String) -> Res<()> {
-    svc.server_stop(&id).map_err(s)
-}
-#[tauri::command]
-fn server_kill(svc: State<'_, Service>, id: String) -> Res<()> {
-    svc.procs.kill(&id).map_err(s)
-}
-#[tauri::command]
-fn server_command(svc: State<'_, Service>, id: String, line: String) -> Res<()> {
-    svc.server_command(&id, &line).map_err(s)
-}
-#[tauri::command]
-fn proc_status(svc: State<'_, Service>, id: String) -> ProcStatus {
-    svc.procs.status(&id)
-}
-#[tauri::command]
-fn console_history(svc: State<'_, Service>, id: String) -> Vec<LineRec> {
-    svc.procs.history(&id)
-}
-#[tauri::command]
-fn console_clear(svc: State<'_, Service>, id: String) {
-    svc.procs.clear_history(&id)
-}
-#[tauri::command]
-fn server_plan(svc: State<'_, Service>, id: String) -> Res<String> {
-    let plan = svc.server_plan(&id).map_err(s)?;
-    Ok(format!("{} {}\n(cwd: {})", plan.program, plan.args.join(" "), plan.cwd))
+// ---------- jugar ----------
+#[derive(Serialize, Clone)]
+struct GameState {
+    state: &'static str,
+    message: String,
+    code: Option<i32>,
+    warnings: Vec<String>,
 }
 
-// ---------- servidor local ----------
 #[tauri::command]
-fn server_status(svc: State<'_, Service>, id: String) -> Res<ServerStatus> {
-    Ok(svc.server_dir(&id).map_err(s)?.1.status())
-}
-#[tauri::command]
-fn server_accept_eula(svc: State<'_, Service>, id: String) -> Res<()> {
-    svc.server_dir(&id).map_err(s)?.1.accept_eula().map_err(s)
-}
-#[tauri::command]
-fn server_properties(svc: State<'_, Service>, id: String) -> Res<Vec<Prop>> {
-    Ok(svc.server_dir(&id).map_err(s)?.1.read_properties())
-}
-#[tauri::command]
-fn server_set_properties(svc: State<'_, Service>, id: String, updates: BTreeMap<String, String>) -> Res<Vec<Prop>> {
-    let sd = svc.server_dir(&id).map_err(s)?.1;
-    sd.ensure().map_err(s)?;
-    sd.write_properties(&updates).map_err(s)?;
-    Ok(sd.read_properties())
-}
-#[tauri::command]
-fn server_plugins(svc: State<'_, Service>, id: String) -> Res<Vec<PluginInfo>> {
-    Ok(svc.server_dir(&id).map_err(s)?.1.plugins())
-}
-#[tauri::command]
-fn server_toggle_plugin(svc: State<'_, Service>, id: String, file: String) -> Res<String> {
-    if svc.procs.is_active(&id) {
-        return Err("detén el servidor antes de activar/desactivar plugins".into());
+fn play(app: AppHandle, st: State<'_, AppState>, instance_id: String, account_id: Option<String>) -> Res<()> {
+    if st.busy.swap(true, Ordering::SeqCst) {
+        return Err("Ya hay una partida o una instalacion en curso.".into());
     }
-    svc.server_dir(&id).map_err(s)?.1.toggle_plugin(&file).map_err(s)
-}
-#[tauri::command]
-fn server_worlds(svc: State<'_, Service>, id: String) -> Res<Vec<WorldInfo>> {
-    Ok(svc.server_dir(&id).map_err(s)?.1.worlds())
-}
-#[tauri::command]
-async fn server_backup_world(svc: State<'_, Service>, id: String, world_name: String) -> Res<String> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let (_, sd) = svc.server_dir(&id).map_err(s)?;
-        let backups_dir = sd.dir.join("backups");
-        let dst = sd.backup_world(&world_name, &backups_dir).map_err(s)?;
-        Ok(dst.to_string_lossy().to_string())
-    })
-    .await?
-}
+    let dirs = st.dirs.clone();
+    let accounts = Accounts::new(&dirs);
+    let account = match account_id.and_then(|id| accounts.get(&id)).or_else(|| accounts.default_account()) {
+        Some(a) => a,
+        None => {
+            st.busy.store(false, Ordering::SeqCst);
+            return Err("Agrega una cuenta (Microsoft o sin premium) para jugar.".into());
+        }
+    };
+    let inst = Instances::new(&dirs).get(&instance_id).map_err(|e| {
+        st.busy.store(false, Ordering::SeqCst);
+        s(e)
+    })?;
+    let mut settings = Settings::load(&dirs);
+    settings.last_instance = Some(inst.id.clone());
+    let _ = settings.save(&dirs);
 
-// ---------- releases ----------
-#[tauri::command]
-fn manifest_import(svc: State<'_, Service>, json: String) -> Res<usize> {
-    release::import_manifest(&svc.layout, &json).map(|m| m.releases.len()).map_err(s)
-}
-#[tauri::command]
-fn manifest_summary(svc: State<'_, Service>) -> Option<usize> {
-    release::load_manifest(&svc.layout).map(|m| m.releases.len())
-}
-#[tauri::command]
-fn resolve_release(svc: State<'_, Service>, id: String) -> Res<Resolution> {
-    let p = svc.store.get(&id).map_err(s)?;
-    Ok(release::resolve(release::load_manifest(&svc.layout).as_ref(), &p))
-}
-#[tauri::command]
-async fn install_server_jar(svc: State<'_, Service>, id: String) -> Res<u64> {
-    let svc = svc.inner().clone();
-    blocking(move || svc.install_server_jar(&id).map_err(s)).await?
-}
-
-// ---------- delta-sync de mods y analizador Fabric ----------
-#[tauri::command]
-async fn modpack_delta_plan(svc: State<'_, Service>, id: String, manifest_json: String) -> Res<DeltaSyncPlan> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let p = svc.store.get(&id).map_err(s)?;
-        let m = ServerModManifest::from_json(&manifest_json).map_err(s)?;
-        let mods_dir = instances::data_dir(&svc.layout, &p).join("mods");
-        modsync::compute_delta_sync(&mods_dir, &m).map_err(s)
-    })
-    .await?
-}
-
-#[tauri::command]
-async fn modpack_delta_apply(svc: State<'_, Service>, id: String, manifest_json: String) -> Res<DeltaSyncResult> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let p = svc.store.get(&id).map_err(s)?;
-        let m = ServerModManifest::from_json(&manifest_json).map_err(s)?;
-        let mods_dir = instances::data_dir(&svc.layout, &p).join("mods");
-        modsync::apply_delta_sync(&mods_dir, &m).map_err(s)
-    })
-    .await?
-}
-
-#[tauri::command]
-fn analyze_fabric_conflicts(manifest_json: String) -> Res<ConflictReport> {
-    let m = ServerModManifest::from_json(&manifest_json).map_err(s)?;
-    Ok(modsync::analyze_mod_conflicts(&m.mods))
-}
-
-// ---------- online ----------
-#[tauri::command]
-async fn ping_server(address: String) -> Res<u128> {
-    blocking(move || ping::tcp_ping(&address, Duration::from_secs(4)).map_err(s)).await?
-}
-#[tauri::command]
-async fn ping_mc_status(address: String) -> Res<ServerStatusPing> {
-    blocking(move || ping::mc_status_ping(&address, Duration::from_secs(4)).map_err(s)).await?
-}
-
-// ---------- cliente Java gestionado (Fabric) ----------
-#[tauri::command]
-fn client_status(svc: State<'_, Service>, id: String) -> Res<ClientStatus> {
-    svc.client_status(&id).map_err(s)
-}
-#[tauri::command]
-async fn client_install(svc: State<'_, Service>, id: String) -> Res<ClientStatus> {
-    let svc = svc.inner().clone();
-    blocking(move || svc.client_install(&id).map_err(s)).await?
-}
-#[tauri::command]
-fn client_plan(svc: State<'_, Service>, id: String) -> Res<String> {
-    svc.client_plan(&id).map_err(s)
-}
-#[tauri::command]
-fn client_start(svc: State<'_, Service>, id: String) -> Res<ProcStatus> {
-    svc.client_start(&id).map_err(s)
-}
-#[tauri::command]
-fn client_stop(svc: State<'_, Service>, id: String) -> Res<()> {
-    svc.client_stop(&id).map_err(s)
-}
-
-// ---------- cliente Rust gestionado (DrakesRust) ----------
-#[tauri::command]
-fn rust_client_status(svc: State<'_, Service>, id: String) -> Res<RustClientStatus> {
-    svc.rust_client_status(&id).map_err(s)
-}
-#[tauri::command]
-async fn rust_client_install(svc: State<'_, Service>, id: String) -> Res<RustClientStatus> {
-    let svc = svc.inner().clone();
-    blocking(move || svc.rust_client_install(&id).map_err(s)).await?
-}
-#[tauri::command]
-fn rust_client_plan(svc: State<'_, Service>, id: String) -> Res<String> {
-    let plan = svc.rust_client_plan(&id).map_err(s)?;
-    Ok(format!("{} {}\n(cwd: {})", plan.program, plan.args.join(" "), plan.cwd))
-}
-#[tauri::command]
-fn rust_client_start(svc: State<'_, Service>, id: String) -> Res<ProcStatus> {
-    svc.rust_client_start(&id).map_err(s)
-}
-#[tauri::command]
-fn rust_client_stop(svc: State<'_, Service>, id: String) -> Res<()> {
-    svc.rust_client_stop(&id).map_err(s)
-}
-#[tauri::command]
-fn rust_client_command(svc: State<'_, Service>, id: String, line: String) -> Res<()> {
-    svc.rust_client_command(&id, &line).map_err(s)
-}
-
-// ---------- mods (cargador) ----------
-#[tauri::command]
-fn mods_report(svc: State<'_, Service>, id: String) -> Res<mods::LoadReport> {
-    let p = svc.store.get(&id).map_err(s)?;
-    mods::load(&svc.layout, &p, drakestar_core::mods::Environment::Client).map_err(s)
-}
-#[tauri::command]
-fn mods_decide(svc: State<'_, Service>, id: String) -> Res<mods::LoadReport> {
-    svc.mods_decide(&id).map_err(s)
-}
-
-// ---------- Blackwall Guard & Modrinth & Prism Import ----------
-#[tauri::command]
-fn mods_guard_override(svc: State<'_, Service>, id: String, item: String, allow: bool) -> Res<()> {
-    let p = svc.store.get(&id).map_err(s)?;
-    let instance = drakestar_app::fabric::instance_dir(&svc.layout, &p.id);
-    let mods_dir = instance.join("mods");
-    mods::set_override(&mods_dir, &item, allow).map_err(s)
+    let cancel = CancelFlag::default();
+    *st.cancel.lock().unwrap() = cancel.clone();
+    st.closing.store(false, Ordering::SeqCst);
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let st = app2.state::<AppState>();
+        let emit = |state: &'static str, message: String, code: Option<i32>, warnings: Vec<String>| {
+            let _ = app2.emit("game-state", GameState { state, message, code, warnings });
+        };
+        emit("preparing", format!("Preparando {}", inst.name), None, vec![]);
+        let sink = Sink { app: app2.clone(), dirs: dirs.clone(), cancel: cancel.clone(), cur: Mutex::new((String::new(), String::new())) };
+        let prepared = match play::prepare(&dirs, &inst, &account.id, &settings.client_id(), &sink) {
+            Ok(p) => p,
+            Err(e) => {
+                support::app_log(&dirs, "ERROR", &format!("preparar {}: {e}", inst.id));
+                emit(if cancel.is_cancelled() { "cancelled" } else { "error" }, e.to_string(), None, vec![]);
+                st.busy.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+        support::app_log(&dirs, "INFO", &format!("lanzando {} ({}) con Java {}", inst.id, prepared.version_id, prepared.java_major));
+        let started = std::time::SystemTime::now();
+        let (app3, d3, inst3, game_dir) = (app2.clone(), dirs.clone(), inst.clone(), prepared.game_dir.clone());
+        let secrets = vec![prepared.session.access_token.clone()];
+        let log_file = prepared.game_dir.join("logs").join("launcher-session.log");
+        let handle = launch::spawn(
+            &prepared.plan,
+            secrets,
+            Some(log_file),
+            {
+                let app = app2.clone();
+                move |stream, line| {
+                    let _ = app.emit("game-line", serde_json::json!({ "stream": stream, "line": support::redact(line) }));
+                }
+            },
+            move |code| {
+                let st = app3.state::<AppState>();
+                let crashed = !st.closing.swap(false, Ordering::SeqCst) && code != Some(0);
+                *st.game.lock().unwrap() = None;
+                st.busy.store(false, Ordering::SeqCst);
+                support::app_log(&d3, "INFO", &format!("el juego termino ({code:?})"));
+                let _ = app3.emit("game-state", GameState { state: if crashed { "crashed" } else { "exited" }, message: String::new(), code, warnings: vec![] });
+                if crashed {
+                    let _ = started;
+                    let ctx = support::Context { app_version: env!("CARGO_PKG_VERSION").into(), reason: "crash".into(), instance: Some(inst3.id.clone()), minecraft: Some(inst3.mc.clone()), exit_code: code, game_dir: Some(game_dir) };
+                    if let Ok(zip) = support::bundle(&d3, &ctx) {
+                        let settings = Settings::load(&d3);
+                        let sent = if settings.send_reports {
+                            support::upload(&zip, &settings.report_endpoint(), "", &settings.device_id, env!("CARGO_PKG_VERSION")).is_ok()
+                        } else {
+                            false
+                        };
+                        let _ = app3.emit("report", serde_json::json!({ "path": zip.to_string_lossy(), "sent": sent }));
+                    }
+                }
+            },
+        );
+        match handle {
+            Ok(h) => {
+                *st.game.lock().unwrap() = Some(h);
+                emit("running", String::new(), None, prepared.warnings);
+            }
+            Err(e) => {
+                support::app_log(&dirs, "ERROR", &format!("spawn: {e}"));
+                st.busy.store(false, Ordering::SeqCst);
+                emit("error", e.to_string(), None, vec![]);
+            }
+        }
+    });
+    Ok(())
 }
 
 #[tauri::command]
-async fn modrinth_search(query: String, limit: Option<usize>) -> Res<Vec<drakestar_app::modrinth::ModrinthSearchHit>> {
-    blocking(move || drakestar_app::modrinth::search_mods(&query, limit.unwrap_or(20)).map_err(s)).await?
+fn play_cancel(st: State<'_, AppState>) {
+    st.cancel.lock().unwrap().cancel();
+}
+#[tauri::command]
+fn game_kill(st: State<'_, AppState>) {
+    if let Some(g) = st.game.lock().unwrap().as_ref() {
+        st.closing.store(true, Ordering::SeqCst);
+        g.kill();
+    }
 }
 
+// ---------- soporte y logs ----------
 #[tauri::command]
-async fn modrinth_versions(project_id: String, mc_version: Option<String>) -> Res<Vec<drakestar_app::modrinth::ModrinthVersion>> {
-    blocking(move || drakestar_app::modrinth::get_project_versions(&project_id, mc_version.as_deref()).map_err(s)).await?
+fn logs_read(st: State<'_, AppState>, source: String, instance: Option<String>, max_lines: usize) -> Vec<String> {
+    let path = match (source.as_str(), instance) {
+        ("game", Some(id)) => st.dirs.instance(&id).join("logs").join("latest.log"),
+        _ => support::log_dir(&st.dirs).join("launcher.log"),
+    };
+    let path = if source == "launcher" {
+        // el log del dia mas reciente
+        std::fs::read_dir(support::log_dir(&st.dirs)).ok().and_then(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.extension().and_then(|x| x.to_str()) == Some("log")).max()).unwrap_or(path)
+    } else {
+        path
+    };
+    let text = std::fs::read(&path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.len().saturating_sub(max_lines.min(2000));
+    lines[start..].iter().map(|l| support::redact(l)).collect()
 }
 
+/// Crea un reporte de soporte; si `send` y hay recolector, lo envia.
 #[tauri::command]
-async fn modrinth_install(svc: State<'_, Service>, id: String, file_url: String, file_name: String) -> Res<u64> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let p = svc.store.get(&id).map_err(s)?;
-        let instance = drakestar_app::fabric::instance_dir(&svc.layout, &p.id);
-        let mods_dir = instance.join("mods");
-        drakestar_app::modrinth::install_mod(&mods_dir, &file_url, &file_name).map_err(s)
-    }).await?
-}
-
-#[tauri::command]
-fn prism_list_instances() -> Vec<drakestar_app::prism_import::PrismInstanceSummary> {
-    drakestar_app::prism_import::list_instances()
-}
-
-#[tauri::command]
-async fn prism_import_instance(svc: State<'_, Service>, path: String) -> Res<drakestar_app::prism_import::PrismImportResult> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        drakestar_app::prism_import::import_instance(std::path::Path::new(&path), &svc.layout, &svc.store).map_err(s)
-    }).await?
-}
-
-#[tauri::command]
-async fn diagnostics(svc: State<'_, Service>) -> Res<String> {
-    let svc = svc.inner().clone();
-    blocking(move || {
-        let st = svc.settings();
-        let list = svc.store.list();
-        let v = serde_json::json!({
-            "app": "DrakeStar", "version": env!("CARGO_PKG_VERSION"),
-            "backend": "tauri", "platform": release::platform(),
-            "data_dir": svc.layout.root(),
-            "java": java::detect(&st.java_bin()),
-            "profiles": list.profiles.iter().map(|p| serde_json::json!({
-                "id": p.id, "mode": p.mode, "channel": p.channel, "minecraft": p.minecraft })).collect::<Vec<_>>(),
-            "invalid_profiles": list.invalid,
-            "manifest_releases": release::load_manifest(&svc.layout).map(|m| m.releases.len()),
-            "launch_implemented": [Mode::LocalServer, Mode::DrakesRust],
-        });
-        serde_json::to_string_pretty(&v).unwrap_or_default()
+async fn support_report(st: State<'_, AppState>, instance: Option<String>, send: bool) -> Res<serde_json::Value> {
+    let dirs = st.dirs.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let inst = instance.as_deref().and_then(|id| Instances::new(&dirs).get(id).ok());
+        let ctx = support::Context {
+            app_version: env!("CARGO_PKG_VERSION").into(),
+            reason: "manual".into(),
+            instance: inst.as_ref().map(|i| i.id.clone()),
+            minecraft: inst.as_ref().map(|i| i.mc.clone()),
+            exit_code: None,
+            game_dir: inst.as_ref().map(|i| dirs.instance(&i.id)),
+        };
+        let zip = support::bundle(&dirs, &ctx).map_err(s)?;
+        let mut sent = false;
+        if send {
+            let st = Settings::load(&dirs);
+            support::upload(&zip, &st.report_endpoint(), "", &st.device_id, env!("CARGO_PKG_VERSION")).map_err(s)?;
+            sent = true;
+        }
+        Ok(serde_json::json!({ "path": zip.to_string_lossy(), "sent": sent }))
     })
     .await
+    .map_err(s)?
+}
+
+#[tauri::command]
+fn open_folder(app: AppHandle, st: State<'_, AppState>, kind: String, id: Option<String>) -> Res<()> {
+    let path = match (kind.as_str(), id) {
+        ("instance", Some(id)) => st.dirs.instance(&id),
+        ("logs", _) => support::log_dir(&st.dirs),
+        ("support", _) => st.dirs.root().join("support"),
+        _ => st.dirs.root().to_path_buf(),
+    };
+    std::fs::create_dir_all(&path).map_err(s)?;
+    app.opener().open_path(path.to_string_lossy().to_string(), None::<&str>).map_err(s)
+}
+
+#[tauri::command]
+fn open_url(app: AppHandle, url: String) -> Res<()> {
+    if !url.starts_with("https://") {
+        return Err("solo https".into());
+    }
+    app.opener().open_url(url, None::<&str>).map_err(s)
 }
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let dir = match std::env::var_os("DRAKESTAR_DATA_DIR") {
                 Some(d) => std::path::PathBuf::from(d),
                 None => app.path().app_data_dir()?,
             };
             std::fs::create_dir_all(&dir)?;
-            let svc = Service::new(Layout::new(dir), Arc::new(TauriSink(app.handle().clone())));
-            app.manage(svc);
+            let dirs = Dirs::new(dir);
+            support::install_panic_hook(dirs.clone());
+            support::rotate(&dirs, 14);
+            support::app_log(&dirs, "INFO", &format!("DrakeStar {} arranca ({} {})", env!("CARGO_PKG_VERSION"), drakestar_mc::os_name(), drakestar_mc::arch_name()));
+            app.manage(AppState { dirs, cancel: Mutex::new(CancelFlag::default()), game: Mutex::new(None), login_cancel: Mutex::new(None), busy: AtomicBool::new(false), closing: AtomicBool::new(false) });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_info, compat_report, list_profiles, validate_profile, create_profile, update_profile,
-            delete_profile, duplicate_profile, import_profile, export_profile, export_profile_file,
-            get_settings, set_settings, detect_java, java_check, list_instances, ensure_instance,
-            list_logs, read_log, clear_logs, server_start, server_stop, server_kill, server_command,
-            proc_status, console_history, console_clear, server_plan, server_status, server_accept_eula,
-            server_properties, server_set_properties, server_plugins, server_toggle_plugin, server_worlds,
-            server_backup_world, manifest_import, manifest_summary, resolve_release, install_server_jar,
-            modpack_delta_plan, modpack_delta_apply, analyze_fabric_conflicts,
-            ping_server, ping_mc_status, diagnostics,
-            client_status, client_install, client_plan, client_start, client_stop,
-            rust_client_status, rust_client_install, rust_client_plan, rust_client_start,
-            rust_client_stop, rust_client_command, mods_report, mods_decide,
-            mods_guard_override, modrinth_search, modrinth_versions, modrinth_install,
-            prism_list_instances, prism_import_instance,
-            msft_login_start, msft_login_poll, msft_logout
+            app_info, settings_get, settings_set, accounts_list, account_add_offline, account_remove, account_set_default,
+            msa_start, msa_cancel, instances_list, instance_save, instance_delete, versions_supported,
+            play, play_cancel, game_kill, logs_read, support_report, open_folder, open_url
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar DrakeStar");
