@@ -70,10 +70,22 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'DrakeStar ${{ github.ref_name }}'
           releaseBody: |
-            Launcher de Minecraft de DrakesCraft. Minecraft 1.20 a 26.2, cuentas Microsoft y sin premium, Java y mods automaticos.
+            Launcher de Minecraft de DrakesCraft: un boton **JUGAR** que instala Java, el juego y los mods y abre Minecraft **1.20 a 26.2** con tu cuenta de Microsoft o sin premium.
 
-            **Instalar**: Windows `.exe` (recomendado: no pide permisos de administrador para actualizar) o `.msi`; Linux `.deb`, `.rpm` o `.AppImage`; macOS `.dmg`.
-            Si ya tienes DrakeStar 0.6 o mas nuevo, se actualiza solo desde Ajustes.
+            ### Que cambia
+            - **JUGAR abre Minecraft de verdad** (antes el modo Slimefun solo levantaba un servidor). Java gestionado por version, sin depender del Java del sistema.
+            - **Cuentas**: login de Microsoft que abre el navegador solo, y varias cuentas por PC, premium y sin premium.
+            - **Interfaz nueva y simple**: Jugar, Cuentas, Instancias, Ajustes y Registros (es/en).
+            - **Registros y reportes**: guarda los logs del launcher y del juego; si el juego se cierra con error envia un reporte solo para depurar, con datos personales tachados (se puede desactivar en Ajustes).
+            - **Actualizacion automatica firmada** y modo sin conexion con lo ya instalado.
+            - Instancias con mods de rendimiento (Sodium, Lithium...) y **DrakeStar Fused** (alfa, un solo jar para 1.20 a 26.2).
+
+            ### Instalar
+            Windows `.exe` (recomendado: instala por usuario y no pide permisos de administrador para actualizar) o `.msi`; Linux `.deb`, `.rpm` o `.AppImage`; macOS `.dmg`.
+            Las versiones 0.5.x no tienen actualizador: instala esta una vez y desde aqui se actualiza sola (Ajustes, Buscar actualizaciones).
+
+            ### Pendiente
+            El login de Microsoft usa un client ID temporal hasta que Mojang apruebe la app propia de DrakeStar; si falla, usa una cuenta sin premium. Guia completa: [docs/LAUNCHER.md](https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/blob/main/docs/LAUNCHER.md).
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
