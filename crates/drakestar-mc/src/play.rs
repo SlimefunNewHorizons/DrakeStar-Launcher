@@ -46,7 +46,7 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
     // 2) version (+ loader)
     let version_id = match inst.loader {
         Loader::Vanilla => inst.mc.clone(),
-        Loader::Fabric => fabric::ensure_profile(d, &inst.mc, None)?,
+        Loader::Fabric => fabric::ensure_profile(d, &inst.mc, inst.loader_version.as_deref())?,
     };
     let installed = install::install(d, &version_id, sink)?;
     if sink.cancelled() {

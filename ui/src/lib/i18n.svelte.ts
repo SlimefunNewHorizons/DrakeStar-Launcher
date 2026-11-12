@@ -1,5 +1,12 @@
 // Textos de la interfaz en espanol (por defecto) e ingles. `t('clave', {var: valor})` es reactivo al cambiar de idioma.
 const es: Record<string, string> = {
+  'import.title': 'Importar instancia', 'import.path': 'Ruta de la carpeta o del archivo',
+  'import.hint': 'Prism: carpeta o ZIP exportado. CurseForge: carpeta de la instancia instalada. Modrinth: archivo .mrpack exportado. Solo Vanilla y Fabric.',
+  'import.safe': 'Copia mods, configuración y mundos a una instancia nueva. Conserva el origen y la versión de Fabric. No importa cuentas ni comandos de inicio. Límite: 4 GiB.',
+  'import.preview': 'Revisar', 'import.copy': 'Importar copia', 'import.working': 'Copiando y descargando archivos…',
+  'f.memory_hint': 'RAM del equipo: {total}. Recomendación: {recommended}, dejando memoria para el sistema y Java.',
+  'f.memory_apply': 'Usar memoria recomendada',
+
   'nav.play': 'Jugar', 'nav.accounts': 'Cuentas', 'nav.instances': 'Instancias', 'nav.settings': 'Ajustes', 'nav.logs': 'Registros',
   'common.cancel': 'Cancelar', 'common.save': 'Guardar', 'common.close': 'Cerrar', 'common.copy': 'Copiar', 'common.copied': '¡Copiado!',
   'common.retry': 'Reintentar', 'common.open_folder': 'Abrir carpeta', 'common.advanced': 'Avanzado', 'common.yes': 'Sí', 'common.no': 'No', 'common.sure': '¿Seguro?',
@@ -56,6 +63,13 @@ const es: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
+  'import.title': 'Import instance', 'import.path': 'Folder or file path',
+  'import.hint': 'Prism: installed folder or exported ZIP. CurseForge: installed instance folder. Modrinth: exported .mrpack. Vanilla and Fabric only.',
+  'import.safe': 'Copies mods, settings and worlds to a new instance. Keeps the source and Fabric version. Accounts and startup commands are excluded. Limit: 4 GiB.',
+  'import.preview': 'Preview', 'import.copy': 'Import copy', 'import.working': 'Copying and downloading files…',
+  'f.memory_hint': 'System RAM: {total}. Recommended: {recommended}, leaving room for the OS and Java.',
+  'f.memory_apply': 'Use recommended memory',
+
   'nav.play': 'Play', 'nav.accounts': 'Accounts', 'nav.instances': 'Instances', 'nav.settings': 'Settings', 'nav.logs': 'Logs',
   'common.cancel': 'Cancel', 'common.save': 'Save', 'common.close': 'Close', 'common.copy': 'Copy', 'common.copied': 'Copied!',
   'common.retry': 'Retry', 'common.open_folder': 'Open folder', 'common.advanced': 'Advanced', 'common.yes': 'Yes', 'common.no': 'No', 'common.sure': 'Sure?',

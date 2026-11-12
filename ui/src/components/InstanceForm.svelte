@@ -10,7 +10,7 @@
 
   const blank = (): Instance => ({
     id: '', name: '', mc: app.versions.find((v) => v === '1.21.11') ?? app.versions[0] ?? '1.21.11', loader: 'fabric', target: { kind: 'menu' },
-    performance: true, fused: false, xmx_mb: 4096, extra_jvm: [], note: '',
+    performance: true, fused: false, xmx_mb: app.memory?.recommended_mb ?? 3072, extra_jvm: [], note: '',
   });
 
   let draft = $state<Instance>(untrack(() => (initial ? JSON.parse(JSON.stringify(initial)) : blank())));
@@ -95,7 +95,12 @@
       <span class="txt"><span>{t('f.fused')}</span><span class="small muted">{fabric ? t('f.fused_hint') : t('f.fabric_only')}</span></span>
     </label>
 
-    <label class="field"><span>{t('f.ram')}: <strong>{fmtRam(draft.xmx_mb)}</strong></span><input type="range" min="1024" max="16384" step="512" bind:value={draft.xmx_mb} /></label>
+    <label class="field"><span>{t('f.ram')}: <strong>{fmtRam(draft.xmx_mb)}</strong></span><input type="range" min="1024" max={Math.max(app.memory?.max_mb ?? 16384, draft.xmx_mb)} step="256" bind:value={draft.xmx_mb} /></label>
+
+    {#if app.memory}
+      <p class="small muted">{t('f.memory_hint', { total: fmtRam(app.memory.total_mb), recommended: fmtRam(app.memory.recommended_mb) })}</p>
+      <button class="btn sm" type="button" onclick={() => (draft.xmx_mb = app.memory!.recommended_mb)}>{t('f.memory_apply')}</button>
+    {/if}
 
     <details>
       <summary>{t('common.advanced')}</summary>
