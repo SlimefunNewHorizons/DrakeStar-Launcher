@@ -4,6 +4,14 @@ Guiones para validar la app Tauri real con Xvfb + xdotool (probado en WSL2 / Ubu
 
 Requisitos: `xvfb xdotool imagemagick`, la app compilada (`ui/node_modules/.bin/tauri build --debug --no-bundle`) y una carpeta de datos ya descargada para no esperar a Java y los assets.
 
+Para revisar el empaquetado Linux sin instalar ni ejecutar la app:
+
+```bash
+python3 tools/e2e/check-linux-release.py DrakeStar_0.6.0_amd64.deb --version 0.6.0
+```
+
+Requiere `dpkg-deb` y `readelf`. Comprueba version, entrada de escritorio y dependencias GTK/WebKit del ejecutable, e imprime sus SHA-256. Tambien acepta un ELF suelto para detectar el CLI empaquetado por error en 0.5.0. Es una comprobacion estatica: no acredita render, IPC, firma ni actualizacion real en una maquina limpia.
+
 ```bash
 # 1) arrancar Xvfb :99 + la app (deja la sesion abierta; usar otra terminal para el resto)
 DS_APP=target/debug/drakestar-launcher DS_E2E_DATA=$HOME/.drakestar-test bash tools/e2e/start.sh
