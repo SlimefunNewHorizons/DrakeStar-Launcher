@@ -61,6 +61,84 @@ fn preview_accepts_regular_small_config_without_writing_instance() {
     assert!(!f.dirs().instances().exists());
 }
 
+// Exercise the shared JSON reader through each public format, independently
+// of the instance.cfg probes above. All metadata and link targets are synthetic.
+const JSON_FORMATS: &[(&str, &str, &str)] = &[
+    (
+        "Prism",
+        "mmc-pack.json",
+        r#"{"components":[{"uid":"net.minecraft","version":"26.2"}]}"#,
+    ),
+    (
+        "CurseForge",
+        "minecraftinstance.json",
+        r#"{"name":"JSON review","gameVersion":"26.2"}"#,
+    ),
+    (
+        "Modrinth",
+        "modrinth.index.json",
+        r#"{"formatVersion":1,"game":"minecraft","name":"JSON review","dependencies":{"minecraft":"26.2"},"files":[]}"#,
+    ),
+];
+
+#[test]
+fn json_metadata_regular_files_preview_all_formats_without_side_effects() {
+    for (format, filename, content) in JSON_FORMATS {
+        let f = Fixture::new();
+        let source = f.0.join("source");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join(filename), content).unwrap();
+        let preview = importing::preview(&f.dirs(), &source).unwrap();
+        assert_eq!(&preview.format, format, "{filename}");
+        assert_eq!(preview.instance.mc, "26.2", "{filename}");
+        assert_eq!(fs::read_to_string(source.join(filename)).unwrap(), *content);
+        assert!(!f.dirs().instances().exists(), "{filename}");
+    }
+}
+
+#[test]
+fn json_metadata_size_limit_rejects_all_formats() {
+    for (_, filename, _) in JSON_FORMATS {
+        let f = Fixture::new();
+        let source = f.0.join("source");
+        fs::create_dir(&source).unwrap();
+        let metadata = fs::File::create(source.join(filename)).unwrap();
+        metadata.set_len(METADATA_LIMIT + 1).unwrap();
+        drop(metadata);
+        let error = importing::preview(&f.dirs(), &source).unwrap_err();
+        assert!(
+            error.to_string().contains("metadatos demasiado grandes"),
+            "{filename}: expected size rejection before JSON parsing, got {error}"
+        );
+        assert!(!f.dirs().instances().exists(), "{filename}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "#785: the shared JSON reader follows external metadata symlinks"]
+fn json_metadata_rejects_external_symlinks_in_all_formats() {
+    let mut accepted = Vec::new();
+    for (format, filename, content) in JSON_FORMATS {
+        let f = Fixture::new();
+        let source = f.0.join("source");
+        fs::create_dir(&source).unwrap();
+        let outside = f.0.join("outside.json");
+        fs::write(&outside, content).unwrap();
+        std::os::unix::fs::symlink(&outside, source.join(filename)).unwrap();
+        if let Ok(preview) = importing::preview(&f.dirs(), &source) {
+            assert_eq!(&preview.format, format, "{filename}");
+            accepted.push(*filename);
+        }
+        assert_eq!(fs::read_to_string(&outside).unwrap(), *content);
+        assert!(!f.dirs().instances().exists(), "{filename}");
+    }
+    assert!(
+        accepted.is_empty(),
+        "preview followed external JSON metadata symlinks: {accepted:?}"
+    );
+}
+
 #[test]
 #[ignore = "#785: Prism instance.cfg currently has no size limit"]
 fn preview_rejects_oversized_prism_config() {
