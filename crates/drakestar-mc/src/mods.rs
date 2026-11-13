@@ -42,7 +42,7 @@ pub struct Installed {
     pub filename: String,
 }
 
-fn get_json<T: for<'de> Deserialize<'de>>(url: &str) -> McResult<T> {
+pub(crate) fn get_json<T: for<'de> Deserialize<'de>>(url: &str) -> McResult<T> {
     let r = ureq::get(url)
         .set("User-Agent", "SlimefunNewHorizons/DrakeStar-Launcher (launcher de Minecraft)")
         .timeout(std::time::Duration::from_secs(30))

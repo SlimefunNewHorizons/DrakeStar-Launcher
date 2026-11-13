@@ -11,8 +11,10 @@
 //! ```
 
 pub mod accounts;
+pub mod catalog;
 pub mod assets;
 pub mod error;
+pub mod ely;
 pub mod fabric;
 pub mod install;
 pub mod instances;

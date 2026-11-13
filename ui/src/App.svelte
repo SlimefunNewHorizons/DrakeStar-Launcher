@@ -6,6 +6,7 @@
   import Welcome from './components/Welcome.svelte';
   import { t } from './lib/i18n.svelte';
   import { app, type View } from './lib/store.svelte';
+  import Catalog from './views/Catalog.svelte';
   import Accounts from './views/Accounts.svelte';
   import Instances from './views/Instances.svelte';
   import Logs from './views/Logs.svelte';
@@ -16,6 +17,7 @@
     { id: 'play', icon: 'play' },
     { id: 'accounts', icon: 'user' },
     { id: 'instances', icon: 'box' },
+    { id: 'catalog', icon: 'download' },
     { id: 'settings', icon: 'sliders' },
     { id: 'logs', icon: 'file' },
   ];
@@ -52,6 +54,7 @@
       {#if app.view === 'play'}<Play />
       {:else if app.view === 'accounts'}<Accounts />
       {:else if app.view === 'instances'}<Instances />
+      {:else if app.view === 'catalog'}<Catalog />
       {:else if app.view === 'settings'}<Settings />
       {:else}<Logs />{/if}
     {/if}

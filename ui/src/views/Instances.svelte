@@ -41,7 +41,7 @@
         </div>
         <div class="row" style="gap:8px; flex:none">
           <button class="btn sm" type="button" onclick={() => (editing = i)}><Icon name="edit" /> {t('ins.edit')}</button>
-          <button class="btn sm ghost" type="button" title={t('common.open_folder')} aria-label={t('common.open_folder')} onclick={() => api.openFolder('instance', i.id)}><Icon name="folder" /></button>
+          <button class="btn sm ghost" type="button" title={t('common.open_folder')} aria-label={t('common.open_folder')} onclick={() => app.openInstanceFolder(i.id)}><Icon name="folder" /></button>
           <ConfirmButton label={t('ins.delete')} onconfirm={() => app.deleteInstance(i.id)} />
         </div>
       </div>
