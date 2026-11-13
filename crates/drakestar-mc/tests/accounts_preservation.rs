@@ -1,0 +1,113 @@
+//! La autenticación no debe convertir archivos dañados en una lista vacía y sobrescribirlos.
+use drakestar_mc::{accounts::Accounts, ely::Token, launch::Session, Dirs};
+use std::{
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+struct Fixture(Dirs);
+
+impl Fixture {
+    fn new() -> Self {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        Self(Dirs::new(std::env::temp_dir().join(format!(
+            "accounts-preservation-788-{}-{nonce}",
+            std::process::id()
+        ))))
+    }
+
+    fn path(&self, name: &str) -> PathBuf {
+        self.0.root().join("accounts").join(name)
+    }
+
+    fn login(&self) -> drakestar_mc::McResult<drakestar_mc::accounts::Account> {
+        // Identidad y tokens sintéticos; no se llama al proveedor ni se usa el perfil real.
+        let session = Session {
+            name: "FixtureEly".into(),
+            uuid: "00000000000000000000000000000788".into(),
+            access_token: "fixture-access-not-a-credential".into(),
+            user_type: "mojang".into(),
+            xuid: None,
+            client_id: None,
+        };
+        let token = Token {
+            access_token: session.access_token.clone(),
+            client_token: "fixture-client-not-a-credential".into(),
+        };
+        Accounts::new(&self.0).add_elyby(&session, &token)
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(self.0.root());
+    }
+}
+
+#[test]
+fn new_profile_can_add_elyby_without_network() {
+    let f = Fixture::new();
+    let account = f.login().unwrap();
+    assert_eq!(Accounts::new(&f.0).list().accounts.len(), 1);
+    assert_eq!(
+        Accounts::new(&f.0).default_account().unwrap().id,
+        account.id
+    );
+    let public = fs::read_to_string(f.path("accounts.json")).unwrap();
+    assert!(!public.contains("fixture-access"));
+    assert!(!public.contains("fixture-client"));
+}
+
+#[test]
+fn malformed_account_list_is_preserved_and_login_rejected() {
+    let f = Fixture::new();
+    Accounts::new(&f.0).add_offline("FixtureOld").unwrap();
+    let damaged = b"{\"accounts\":[{\"name\":\"FixtureOld\"";
+    fs::write(f.path("accounts.json"), damaged).unwrap();
+
+    let result = f.login();
+
+    assert_eq!(
+        fs::read(f.path("accounts.json")).unwrap(),
+        damaged,
+        "Una lectura inválida debe conservar los bytes recuperables del perfil"
+    );
+    assert!(
+        !f.path("secrets.json").exists(),
+        "Un perfil público inválido no debe dejar credenciales huérfanas"
+    );
+    assert!(
+        result.is_err(),
+        "El acceso debe informar el daño, sin reemplazar el perfil"
+    );
+}
+
+#[test]
+fn malformed_secret_store_is_preserved_with_existing_accounts() {
+    let f = Fixture::new();
+    Accounts::new(&f.0).add_offline("FixtureOld").unwrap();
+    let original_accounts = fs::read(f.path("accounts.json")).unwrap();
+    let damaged = b"{\"msa-fixture\":\"fixture-old-not-a-credential\"";
+    fs::write(f.path("secrets.json"), damaged).unwrap();
+
+    let result = f.login();
+
+    assert_eq!(
+        fs::read(f.path("secrets.json")).unwrap(),
+        damaged,
+        "Un almacén inválido debe conservar tokens recuperables de otras cuentas"
+    );
+    assert_eq!(
+        fs::read(f.path("accounts.json")).unwrap(),
+        original_accounts,
+        "El error no debe añadir una cuenta parcialmente persistida"
+    );
+    assert!(
+        result.is_err(),
+        "El acceso debe informar el almacén inválido"
+    );
+}
