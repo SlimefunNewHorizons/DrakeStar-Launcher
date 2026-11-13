@@ -107,12 +107,24 @@ pub fn arch_name() -> &'static str {
 
 /// Escritura atomica (temporal + rename).
 pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
     if let Some(p) = path.parent() {
         std::fs::create_dir_all(p)?;
     }
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, data)?;
-    std::fs::rename(&tmp, path)
+    // No seguir enlaces ni truncar el temporal de otra escritura.
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    let written = file.write_all(data);
+    drop(file);
+    let result = written.and_then(|()| std::fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
