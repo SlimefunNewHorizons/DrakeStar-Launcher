@@ -111,3 +111,53 @@ fn malformed_secret_store_is_preserved_with_existing_accounts() {
         "El acceso debe informar el almacén inválido"
     );
 }
+
+#[test]
+fn failed_elyby_secret_write_keeps_existing_account_files() {
+    let f = Fixture::new();
+    Accounts::new(&f.0).add_offline("FixtureOld").unwrap();
+    let original = fs::read(f.path("accounts.json")).unwrap();
+    // Una colisión de directorio provoca EISDIR, incluso ejecutando como root.
+    fs::create_dir(f.path("secrets.json.tmp")).unwrap();
+
+    assert!(f.login().is_err());
+
+    assert_eq!(fs::read(f.path("accounts.json")).unwrap(), original);
+    assert!(!f.path("secrets.json").exists());
+}
+
+#[test]
+fn failed_elyby_account_write_must_not_leave_orphan_credentials() {
+    let f = Fixture::new();
+    Accounts::new(&f.0).add_offline("FixtureOld").unwrap();
+    let original = fs::read(f.path("accounts.json")).unwrap();
+    // Se puede leer el perfil; solo falla su posterior persistencia.
+    fs::create_dir(f.path("accounts.json.tmp")).unwrap();
+
+    assert!(f.login().is_err());
+
+    assert_eq!(fs::read(f.path("accounts.json")).unwrap(), original);
+    assert!(
+        !f.path("secrets.json").exists(),
+        "Una alta rechazada no debe persistir credenciales sin cuenta"
+    );
+}
+
+#[test]
+fn failed_account_removal_must_preserve_public_profile() {
+    let f = Fixture::new();
+    let account = f.login().unwrap();
+    let original_accounts = fs::read(f.path("accounts.json")).unwrap();
+    let original_secrets = fs::read(f.path("secrets.json")).unwrap();
+    fs::create_dir(f.path("secrets.json.tmp")).unwrap();
+
+    assert!(Accounts::new(&f.0).remove(&account.id).is_err());
+
+    // Evita mostrar incluso los tokens sintéticos si esta guarda falla.
+    assert!(fs::read(f.path("secrets.json")).unwrap() == original_secrets);
+    assert_eq!(
+        fs::read(f.path("accounts.json")).unwrap(),
+        original_accounts,
+        "Una retirada rechazada debe conservar la cuenta y su selección"
+    );
+}
