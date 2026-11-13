@@ -1,5 +1,33 @@
 // Textos de la interfaz en espanol (por defecto) e ingles. `t('clave', {var: valor})` es reactivo al cambiar de idioma.
 const es: Record<string, string> = {
+  "acc.elyby": "Ely.by",
+  "ely.hint": "Accede con tu cuenta Ely.by. No guardamos tu contraseña ni el código 2FA. Descarga authlib-injector al jugar; requiere un servidor que acepte Ely.by o sin premium.",
+  "ely.username": "Usuario o correo Ely.by",
+  "ely.password": "Contraseña",
+  "ely.totp": "Código 2FA (si lo usas)",
+  "ely.login": "Iniciar sesión con Ely.by",
+  "ely.working": "Iniciando sesión…",
+  "ely.success": "Cuenta Ely.by agregada.",
+
+  "nav.catalog": "Catálogo",
+  "cat.title": "Catálogo Modrinth",
+  "cat.subtitle": "Instala contenido compatible con la versión de tu instancia. Cierra el juego antes de hacer cambios.",
+  "cat.type": "Contenido",
+  "cat.search": "Buscar",
+  "cat.searching": "Buscando…",
+  "cat.fabric": "Elige una instancia Fabric para instalar mods o shaders.",
+  "cat.shaders": "Instala Iris y sus dependencias automáticamente. Activa el shader en las opciones de vídeo del juego; el rendimiento depende de tu GPU.",
+  "cat.working": "Descargando y verificando contenido y dependencias…",
+  "cat.installed": "Instalado desde el catálogo",
+  "cat.install": "Instalar",
+  "cat.remove": "Quitar",
+  "cat.empty": "Todavía no has instalado contenido desde el catálogo.",
+  "cat.managed": "Solo se muestran los proyectos del catálogo. Las dependencias se quitan por separado cuando ningún proyecto las necesita. Activa los resource packs en el juego. Los mods de Rendimiento se restauran al jugar mientras esa opción siga activada.",
+  "cat.external": "Este archivo ya existía: quitarlo de esta lista conserva el archivo original.",
+
+  'diag.recovery': 'Revisa el registro del launcher si falló la preparación, o el del juego si se cerró. Puedes corregir la instancia o la cuenta y volver a Jugar.',
+  'diag.back': 'Volver a Jugar',
+
   'import.title': 'Importar instancia', 'import.path': 'Ruta de la carpeta o del archivo',
   'import.hint': 'Prism: carpeta o ZIP exportado. CurseForge: carpeta de la instancia instalada. Modrinth: archivo .mrpack exportado. Solo Vanilla y Fabric.',
   'import.safe': 'Copia mods, configuración y mundos a una instancia nueva. Conserva el origen y la versión de Fabric. No importa cuentas ni comandos de inicio. Límite: 4 GiB.',
@@ -7,7 +35,7 @@ const es: Record<string, string> = {
   'f.memory_hint': 'RAM del equipo: {total}. Recomendación: {recommended}, dejando memoria para el sistema y Java.',
   'f.memory_apply': 'Usar memoria recomendada',
 
-  'nav.play': 'Jugar', 'nav.accounts': 'Cuentas', 'nav.instances': 'Instancias', 'nav.settings': 'Ajustes', 'nav.logs': 'Registros',
+  'nav.play': 'Jugar', 'nav.accounts': 'Cuentas', 'nav.instances': 'Instancias', 'nav.settings': 'Ajustes', 'nav.logs': 'Diagnóstico',
   'common.cancel': 'Cancelar', 'common.save': 'Guardar', 'common.close': 'Cerrar', 'common.copy': 'Copiar', 'common.copied': '¡Copiado!',
   'common.retry': 'Reintentar', 'common.open_folder': 'Abrir carpeta', 'common.advanced': 'Avanzado', 'common.yes': 'Sí', 'common.no': 'No', 'common.sure': '¿Seguro?',
 
@@ -51,7 +79,7 @@ const es: Record<string, string> = {
 
   'upd.banner': 'Hay una versión nueva de DrakeStar ({v}).', 'upd.install': 'Actualizar y reiniciar', 'upd.busy': 'Termina la partida para actualizar.',
 
-  'log.title': 'Registros', 'log.subtitle': 'Si algo falla, aquí está la causa. Los datos personales aparecen tachados.', 'log.launcher': 'Launcher', 'log.game': 'Juego',
+  'log.title': 'Diagnóstico', 'log.subtitle': 'Si algo falla, aquí está la causa. Los datos personales aparecen tachados.', 'log.launcher': 'Launcher', 'log.game': 'Juego',
   'log.refresh': 'Actualizar', 'log.empty': 'Todavía no hay registros.', 'log.create': 'Crear reporte', 'log.send': 'Enviar reporte', 'log.sent': 'Reporte enviado. ¡Gracias!', 'log.saved': 'Reporte guardado en {path}',
   'log.live': 'Salida en vivo de esta sesión', 'log.file': 'Último registro guardado del juego',
 
@@ -63,6 +91,34 @@ const es: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
+  "acc.elyby": "Ely.by",
+  "ely.hint": "Sign in with your Ely.by account. Your password and 2FA code are never saved. Downloads authlib-injector on launch; requires a server accepting Ely.by or offline accounts.",
+  "ely.username": "Ely.by username or email",
+  "ely.password": "Password",
+  "ely.totp": "2FA code (if enabled)",
+  "ely.login": "Sign in with Ely.by",
+  "ely.working": "Signing in…",
+  "ely.success": "Ely.by account added.",
+
+  "nav.catalog": "Catalog",
+  "cat.title": "Modrinth catalog",
+  "cat.subtitle": "Install content compatible with your instance version. Close the game before making changes.",
+  "cat.type": "Content",
+  "cat.search": "Search",
+  "cat.searching": "Searching…",
+  "cat.fabric": "Select a Fabric instance to install mods or shaders.",
+  "cat.shaders": "Automatically installs Iris and its dependencies. Enable the shader in the game video settings; performance depends on your GPU.",
+  "cat.working": "Downloading and verifying content and dependencies…",
+  "cat.installed": "Installed from catalog",
+  "cat.install": "Install",
+  "cat.remove": "Remove",
+  "cat.empty": "No content installed from the catalog yet.",
+  "cat.managed": "Only catalog projects appear here. Remove dependencies separately after removing the projects that need them. Enable resource packs in game. Performance mods are restored on launch while that option is enabled.",
+  "cat.external": "This file already existed: removing it from this list keeps the original file.",
+
+  'diag.recovery': 'Check the launcher log if setup failed, or the game log if it crashed. You can edit the instance or account and return to Play.',
+  'diag.back': 'Return to Play',
+
   'import.title': 'Import instance', 'import.path': 'Folder or file path',
   'import.hint': 'Prism: installed folder or exported ZIP. CurseForge: installed instance folder. Modrinth: exported .mrpack. Vanilla and Fabric only.',
   'import.safe': 'Copies mods, settings and worlds to a new instance. Keeps the source and Fabric version. Accounts and startup commands are excluded. Limit: 4 GiB.',
@@ -70,7 +126,7 @@ const en: Record<string, string> = {
   'f.memory_hint': 'System RAM: {total}. Recommended: {recommended}, leaving room for the OS and Java.',
   'f.memory_apply': 'Use recommended memory',
 
-  'nav.play': 'Play', 'nav.accounts': 'Accounts', 'nav.instances': 'Instances', 'nav.settings': 'Settings', 'nav.logs': 'Logs',
+  'nav.play': 'Play', 'nav.accounts': 'Accounts', 'nav.instances': 'Instances', 'nav.settings': 'Settings', 'nav.logs': 'Diagnostics',
   'common.cancel': 'Cancel', 'common.save': 'Save', 'common.close': 'Close', 'common.copy': 'Copy', 'common.copied': 'Copied!',
   'common.retry': 'Retry', 'common.open_folder': 'Open folder', 'common.advanced': 'Advanced', 'common.yes': 'Yes', 'common.no': 'No', 'common.sure': 'Sure?',
 
@@ -114,7 +170,7 @@ const en: Record<string, string> = {
 
   'upd.banner': 'A new DrakeStar version is available ({v}).', 'upd.install': 'Update and restart', 'upd.busy': 'Finish your game to update.',
 
-  'log.title': 'Logs', 'log.subtitle': 'If something fails, the cause is here. Personal data is removed.', 'log.launcher': 'Launcher', 'log.game': 'Game',
+  'log.title': 'Diagnostics', 'log.subtitle': 'If something fails, the cause is here. Personal data is removed.', 'log.launcher': 'Launcher', 'log.game': 'Game',
   'log.refresh': 'Refresh', 'log.empty': 'No logs yet.', 'log.create': 'Create report', 'log.send': 'Send report', 'log.sent': 'Report sent. Thank you!', 'log.saved': 'Report saved at {path}',
   'log.live': 'Live output of this session', 'log.file': 'Latest saved game log',
 

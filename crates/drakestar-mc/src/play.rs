@@ -35,8 +35,9 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
     let session = match Accounts::new(d).session(account_id, client_id) {
         Ok(s) => s,
         // sin internet: se juega en solitario con el nombre y el UUID de la cuenta (los servidores no dejaran entrar)
-        Err(McError::Net(_)) => {
+        Err(e @ McError::Net(_)) => {
             let acc = Accounts::new(d).get(account_id).ok_or_else(|| McError::NotFound(format!("cuenta {account_id}")))?;
+            if acc.kind != crate::accounts::Kind::Microsoft { return Err(e); }
             warnings.push("Sin conexion con Microsoft: juegas en solitario con el nombre de tu cuenta; los servidores no te dejaran entrar.".into());
             Session { name: acc.name, uuid: acc.uuid, access_token: "0".into(), user_type: "legacy".into(), xuid: None, client_id: None }
         }
@@ -119,6 +120,10 @@ pub fn prepare(d: &Dirs, inst: &Instance, account_id: &str, client_id: &str, sin
         }
         local = Some(LocalServer { plan: server::plan(d, &inst.id, &jar, sjava, (inst.xmx_mb / 2).max(if monolith { 3072 } else { 1536 })), port, log_file: server::dir(d, &inst.id).join("logs").join("launcher-server.log") });
         o.join_server = Some(format!("127.0.0.1:{port}"));
+    }
+    if Accounts::new(d).get(account_id).is_some_and(|a| a.kind == crate::accounts::Kind::Elyby) {
+        sink.stage("elyby", "Preparando autenticación Ely.by");
+        o.extra_jvm.push(crate::ely::agent_arg(&crate::ely::ensure_agent(d)?));
     }
     let plan = launch::plan(d, &installed, &session, &o)?;
     Ok(Prepared { plan, session, game_dir, warnings, java_major: installed.java_major, version_id, server: local })

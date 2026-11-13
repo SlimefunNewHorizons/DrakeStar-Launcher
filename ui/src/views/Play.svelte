@@ -48,7 +48,7 @@
           <div class="row" style="gap:8px">
             <select id="acc-select" value={acc.id} disabled={app.busy} onchange={(e) => app.useAccount(e.currentTarget.value)}>
               {#each app.accounts.accounts as a (a.id)}
-                <option value={a.id}>{a.name} · {a.kind === 'microsoft' ? t('acc.microsoft') : t('acc.offline')}</option>
+                <option value={a.id}>{a.name} · {t('acc.' + a.kind)}</option>
               {/each}
             </select>
             <button class="btn sm ghost" type="button" onclick={() => (app.view = 'accounts')}>{t('nav.accounts')}</button>
@@ -57,6 +57,7 @@
       </div>
 
       <div class="row">
+        <button class="btn ghost" type="button" onclick={() => app.openInstanceFolder(inst.id)}><Icon name="folder" /> {t('common.open_folder')}</button>
         {#if live}
           <button class="btn play live" type="button" disabled>{t('play.running')}</button>
           <button class="btn" type="button" onclick={() => app.killGame()}><Icon name="stop" /> {t('play.close_game')}</button>

@@ -2,10 +2,13 @@
   import { tick } from 'svelte';
   import { api } from '../lib/api';
   import Icon from '../components/Icon.svelte';
-  import { lineClass } from '../lib/format';
+  import { errText, lineClass } from '../lib/format';
   import { t } from '../lib/i18n.svelte';
   import { app } from '../lib/store.svelte';
 
+  const failed = $derived(app.phase === 'error' || app.phase === 'crashed');
+  const instance = $derived(app.attemptInstance ?? app.instance);
+  let loadError = $state('');
   let tab = $state<'launcher' | 'game'>('launcher');
   let saved = $state<string[]>([]);
   let box = $state<HTMLDivElement>();
@@ -16,12 +19,14 @@
 
   async function load() {
     try {
-      saved = await api.logs(tab, tab === 'game' ? (app.instance?.id ?? null) : null, 400);
-    } catch {
+      loadError = '';
+      saved = await api.logs(tab, tab === 'game' ? (instance?.id ?? null) : null, 400);
+    } catch (e) {
+      loadError = errText(e);
       saved = [];
     }
   }
-  $effect(() => { tab; load(); });
+  $effect(() => { tab; instance?.id; load(); });
   $effect(() => {
     shown.length;
     tick().then(() => box && (box.scrollTop = box.scrollHeight));
@@ -33,6 +38,23 @@
     <h1>{t('log.title')}</h1>
     <p class="muted">{t('log.subtitle')}</p>
   </header>
+
+  {#if failed}
+    <section class="card stack" role="alert">
+      <h2>{app.phase === 'crashed' ? t('play.crashed', { code: app.exitCode !== null ? ` (${app.exitCode})` : '' }) : t('play.error')}</h2>
+      <p>{instance?.name} · {instance?.mc}</p>
+      {#if app.failedStage}<p class="small muted">{app.failedStage}</p>{/if}
+      {#if app.message}<pre style="white-space:pre-wrap;overflow-wrap:anywhere">{app.message}</pre>{/if}
+      <p class="small muted">{t('diag.recovery')}</p>
+      <div class="row">
+        <button class="btn primary" type="button" disabled={app.busy} onclick={() => { if (instance) app.select(instance.id); app.view = 'play'; }}>{t('diag.back')}</button>
+        <button class="btn" type="button" onclick={() => (app.view = 'instances')}>{t('ins.edit')}</button>
+        <button class="btn" type="button" onclick={() => (app.view = 'accounts')}>{t('nav.accounts')}</button>
+        {#if instance}<button class="btn" type="button" onclick={() => app.openInstanceFolder(instance.id)}><Icon name="folder" /> {t('common.open_folder')}</button>{/if}
+      </div>
+    </section>
+  {/if}
+  {#if loadError}<p class="note err" role="alert">{loadError}</p>{/if}
 
   <div class="row spread">
     <div class="seg" style="max-width:320px">
