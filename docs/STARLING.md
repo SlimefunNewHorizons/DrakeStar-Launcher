@@ -18,7 +18,24 @@ La descarga está limitada a 256 MiB por archivo, exclusivamente desde el CDN HT
 
 En **Cuentas → Ely.by**, introduce usuario, contraseña y opcionalmente seis dígitos 2FA. Contraseña y código no se persisten ni se registran; se vacían tras el intento. Solo se guarda el token de sesión y su client token en `accounts/secrets.json`, fuera de los datos públicos; permisos Unix 0600 y directorio 0700. En Windows se usa el perfil del usuario, como para Microsoft. El token se renueva antes de jugar. `authlib-injector` se descarga de su release oficial fijado, se verifica SHA-256 y se añade únicamente a la JVM del cliente Ely.by. Una sesión Ely.by no autentica contra servidores exclusivamente Microsoft: requiere servidores que acepten Ely.by o sin premium. No cambia la autenticación del servidor.
 
-En **Diagnóstico**, Launcher muestra la preparación y Juego muestra stdout/stderr de esta sesión, incluso si el cliente falla antes de crear `latest.log`. En una nueva sesión de la app se usa el archivo `launcher-session.log` si existe, y `latest.log` como respaldo. El fallo conserva la instancia del intento para mostrar registros y generar reportes aunque se cambie la selección. Al volver a Jugar se puede corregir la instancia/cuenta y reintentar.
+En **Diagnóstico**, Launcher muestra la preparación y Juego muestra stdout/stderr de esta sesión, incluso si el cliente falla antes de crear `latest.log`. En una nueva sesión de la app se usa el archivo `launcher-session.log` si existe, y `latest.log` como respaldo. El fallo conserva la instancia del intento para mostrar registros y generar reportes aunque se cambie la selección. Al volver a Jugar se puede corregir la instancia/cuenta y reintentar. Al cambiar de instancia o pestaña, una respuesta retrasada de la consulta anterior no sustituye los registros actuales.
+
+## Conservación ante errores de persistencia
+
+Las mutaciones de cuentas rechazan JSON ilegible o dañado antes de escribir.
+Si falla la escritura del listado después de guardar credenciales, se restauran
+los bytes anteriores de `secrets.json` (o se retira el archivo nuevo), con permisos
+0600 en Unix. También se aplica a Microsoft y a la retirada de cuentas. Si la
+restauración falla, se indica conservar `accounts/` para recuperar los datos.
+Esto cubre errores de E/S durante la operación; los dos archivos no forman una
+transacción resistente al cierre abrupto del proceso ni a escritores simultáneos.
+
+El catálogo guarda el índice antes de borrar el archivo propio. Si falla el
+índice, el contenido permanece; si falla el borrado, se restaura la entrada.
+Un cierre abrupto entre ambos pasos puede dejar un archivo conservado fuera del
+índice; debe revisarse en la carpeta de la instancia. La preparación conserva el
+tipo de cuenta elegido para añadir el agente Ely.by aunque se retire el perfil
+durante las descargas. Este último caso requiere todavía ensayo gráfico.
 
 ## Validación reproducible
 

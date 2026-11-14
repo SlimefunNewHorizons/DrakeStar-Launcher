@@ -453,14 +453,24 @@ pub fn remove(d: &Dirs, inst: &Instance, project: &str) -> McResult<Vec<Entry>> 
         )));
     }
     let path = file_path(&root, entry.kind, &entry.filename)?;
-    if entry.owned && path.exists() {
+    let delete_file = entry.owned && path.exists();
+    if delete_file {
         if hash(&std::fs::read(&path)?) != entry.sha512 {
             return Err(invalid("El archivo fue modificado fuera del catálogo; revísalo en la carpeta de la instancia."));
         }
-        std::fs::remove_file(&path)?;
     }
+    let previous = entries.clone();
     entries.retain(|e| e.project_id != project);
+    // Persistir antes de borrar: un índice no escribible nunca pierde el archivo.
     save(&root, &entries)?;
+    if delete_file {
+        if let Err(error) = std::fs::remove_file(&path) {
+            if save(&root, &previous).is_err() {
+                return Err(invalid("No se pudo retirar el archivo ni restaurar el índice. El archivo sigue en la carpeta de la instancia; revísalo antes de reintentar."));
+            }
+            return Err(error.into());
+        }
+    }
     Ok(entries)
 }
 
