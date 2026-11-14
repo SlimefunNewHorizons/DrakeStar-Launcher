@@ -11,6 +11,7 @@
   let loadError = $state('');
   let tab = $state<'launcher' | 'game'>('launcher');
   let saved = $state<string[]>([]);
+  let loadRequest = 0;
   let box = $state<HTMLDivElement>();
 
   // En la pestana del juego, mientras hay una partida de esta sesion se muestra su salida en vivo; si no, el ultimo latest.log.
@@ -18,12 +19,14 @@
   const shown = $derived(live ? app.gameLines : saved);
 
   async function load() {
+    const request = ++loadRequest;
+    loadError = '';
+    saved = [];
     try {
-      loadError = '';
-      saved = await api.logs(tab, tab === 'game' ? (instance?.id ?? null) : null, 400);
+      const lines = await api.logs(tab, tab === 'game' ? (instance?.id ?? null) : null, 400);
+      if (request === loadRequest) saved = lines;
     } catch (e) {
-      loadError = errText(e);
-      saved = [];
+      if (request === loadRequest) loadError = errText(e);
     }
   }
   $effect(() => { tab; instance?.id; load(); });

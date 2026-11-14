@@ -57,7 +57,15 @@ impl Accounts {
     }
 
     pub fn list(&self) -> AccountList {
-        std::fs::read_to_string(self.list_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        self.read_list().unwrap_or_default()
+    }
+
+    fn read_list(&self) -> McResult<AccountList> {
+        match std::fs::read(self.list_path()) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AccountList::default()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn save(&self, l: &AccountList) -> McResult<()> {
@@ -65,11 +73,52 @@ impl Accounts {
         Ok(())
     }
 
+    #[cfg(test)]
     fn secrets(&self) -> BTreeMap<String, String> {
-        std::fs::read_to_string(self.secrets_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        self.read_secrets().unwrap_or_default()
+    }
+
+    fn read_secrets(&self) -> McResult<BTreeMap<String, String>> {
+        match std::fs::read(self.secrets_path()) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    // Si falla el listado, restaura los bytes anteriores del almacén privado.
+    // No es una transacción resistente a la caída del proceso entre los dos archivos.
+    fn save_with_secrets(&self, list: &AccountList, secrets: &BTreeMap<String, String>) -> McResult<()> {
+        let previous = match std::fs::read(self.secrets_path()) {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
+        if let Err(error) = self.save_secrets(secrets).and_then(|()| self.save(list)) {
+            // Una escritura rechazada antes del rename ya conserva el almacén.
+            let unchanged = match std::fs::read(self.secrets_path()) {
+                Ok(bytes) => previous.as_ref() == Some(&bytes),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => previous.is_none(),
+                Err(_) => false,
+            };
+            if unchanged { return Err(error); }
+            let restored = match previous {
+                Some(bytes) => self.save_secret_bytes(&bytes),
+                None => std::fs::remove_file(self.secrets_path()).map_err(McError::from),
+            };
+            if restored.is_err() {
+                return Err(McError::Invalid("No se pudo guardar la cuenta ni restaurar accounts/secrets.json. Conserva la carpeta accounts para recuperarla antes de reintentar.".into()));
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn save_secrets(&self, m: &BTreeMap<String, String>) -> McResult<()> {
+        self.save_secret_bytes(serde_json::to_string(m)?.as_bytes())
+    }
+
+    fn save_secret_bytes(&self, bytes: &[u8]) -> McResult<()> {
         std::fs::create_dir_all(&self.dir)?;
         #[cfg(unix)]
         {
@@ -77,7 +126,7 @@ impl Accounts {
             std::fs::set_permissions(&self.dir, std::fs::Permissions::from_mode(0o700))?;
         }
         let p = self.secrets_path();
-        write_atomic(&p, serde_json::to_string(m)?.as_bytes())?;
+        write_atomic(&p, bytes)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -100,7 +149,7 @@ impl Accounts {
         if !offline::valid_name(name) {
             return Err(McError::Invalid("el nombre debe tener 3 a 16 letras, numeros o guion bajo".into()));
         }
-        let mut l = self.list();
+        let mut l = self.read_list()?;
         let uuid = offline::offline_uuid(name);
         let id = format!("offline-{uuid}");
         if let Some(a) = l.accounts.iter().find(|a| a.id == id) {
@@ -116,21 +165,20 @@ impl Accounts {
     }
 
     pub fn add_elyby(&self, session: &Session, token: &crate::ely::Token) -> McResult<Account> {
-        let mut l = self.list();
+        let mut l = self.read_list()?;
         let id = format!("ely-{}", session.uuid);
         let acc = Account { id: id.clone(), kind: Kind::Elyby, name: session.name.clone(), uuid: session.uuid.clone(), added_at: now(), last_used: None };
         if let Some(existing) = l.accounts.iter_mut().find(|a| a.id == id) { existing.name = session.name.clone(); }
         else { l.accounts.push(acc.clone()); }
         if l.default.is_none() { l.default = Some(id.clone()); }
-        let mut secrets = self.secrets();
+        let mut secrets = self.read_secrets()?;
         secrets.insert(id.clone(), serde_json::to_string(token)?);
-        self.save_secrets(&secrets)?;
-        self.save(&l)?;
+        self.save_with_secrets(&l, &secrets)?;
         self.get(&id).ok_or_else(|| McError::NotFound(id))
     }
 
     pub fn add_microsoft(&self, p: &McProfile, refresh_token: &str) -> McResult<Account> {
-        let mut l = self.list();
+        let mut l = self.read_list()?;
         let id = format!("msa-{}", p.uuid);
         let acc = Account { id: id.clone(), kind: Kind::Microsoft, name: p.name.clone(), uuid: p.uuid.clone(), added_at: now(), last_used: None };
         match l.accounts.iter_mut().find(|a| a.id == id) {
@@ -142,29 +190,28 @@ impl Accounts {
         if l.default.is_none() {
             l.default = Some(id.clone());
         }
-        self.save(&l)?;
-        let mut s = self.secrets();
+        let mut s = self.read_secrets()?;
         s.insert(id.clone(), refresh_token.to_string());
-        self.save_secrets(&s)?;
+        self.save_with_secrets(&l, &s)?;
         self.get(&id).ok_or_else(|| McError::NotFound(id))
     }
 
     pub fn remove(&self, id: &str) -> McResult<()> {
-        let mut l = self.list();
+        let mut l = self.read_list()?;
         l.accounts.retain(|a| a.id != id);
         if l.default.as_deref() == Some(id) {
             l.default = l.accounts.first().map(|a| a.id.clone());
         }
-        self.save(&l)?;
-        let mut s = self.secrets();
+        let mut s = self.read_secrets()?;
         if s.remove(id).is_some() {
-            self.save_secrets(&s)?;
+            self.save_with_secrets(&l, &s)
+        } else {
+            self.save(&l)
         }
-        Ok(())
     }
 
     pub fn set_default(&self, id: &str) -> McResult<()> {
-        let mut l = self.list();
+        let mut l = self.read_list()?;
         if !l.accounts.iter().any(|a| a.id == id) {
             return Err(McError::NotFound(format!("cuenta {id}")));
         }
@@ -173,7 +220,7 @@ impl Accounts {
     }
 
     pub fn touch(&self, id: &str) {
-        let mut l = self.list();
+        let Ok(mut l) = self.read_list() else { return; };
         if let Some(a) = l.accounts.iter_mut().find(|a| a.id == id) {
             a.last_used = Some(now());
             let _ = self.save(&l);
@@ -186,7 +233,7 @@ impl Accounts {
         match acc.kind {
             Kind::Offline => Ok(Session::offline(&acc.name)),
             Kind::Elyby => {
-                let stored = self.secrets().get(id).cloned().ok_or_else(|| McError::Invalid("Vuelve a iniciar sesión con Ely.by.".into()))?;
+                let stored = self.read_secrets()?.get(id).cloned().ok_or_else(|| McError::Invalid("Vuelve a iniciar sesión con Ely.by.".into()))?;
                 let token: crate::ely::Token = serde_json::from_str(&stored).map_err(|_| McError::Invalid("Vuelve a iniciar sesión con Ely.by.".into()))?;
                 let (session, token) = crate::ely::refresh(&token)?;
                 if session.uuid != acc.uuid { return Err(McError::Invalid("La identidad Ely.by cambió: vuelve a iniciar sesión.".into())); }
@@ -195,10 +242,10 @@ impl Accounts {
                 Ok(session)
             }
             Kind::Microsoft => {
-                let rt = self.secrets().get(id).cloned().ok_or_else(|| McError::Invalid("falta el acceso guardado de esta cuenta: vuelve a iniciar sesion".into()))?;
+                let rt = self.read_secrets()?.get(id).cloned().ok_or_else(|| McError::Invalid("falta el acceso guardado de esta cuenta: vuelve a iniciar sesion".into()))?;
                 let t = msa::refresh(client_id, &rt)?;
                 let p = msa::minecraft_profile(&t.access_token)?;
-                let mut s = self.secrets();
+                let mut s = self.read_secrets()?;
                 s.insert(id.to_string(), t.refresh_token.clone());
                 self.save_secrets(&s)?;
                 self.touch(id);
