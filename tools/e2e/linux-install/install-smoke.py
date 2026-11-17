@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install/upgrade official .debs ONLY inside the disposable Docker fixture."""
+"""Install/upgrade official packages ONLY inside the disposable Docker fixture."""
 import argparse
 import hashlib
 import json
@@ -7,12 +7,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
-import tempfile
-
-
-def command(*args):
-    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT,
-                                   timeout=120).strip()
+from package_backend import command, select_backend
 
 
 def digest(path):
@@ -30,22 +25,16 @@ def main():
     # Checking IPv4 routes alone misses interfaces with IPv6 or no route yet.
     if {entry.name for entry in Path("/sys/class/net").iterdir()} != {"lo"}:
         parser.error("Requires docker run --network none")
-    result = {"ok": False, "steps": [], "scope": "dpkg upgrade; not in-app updater",
+    backend = select_backend(args.older, args.newer)
+    result = {"ok": False, "steps": [], "scope": backend.name + " upgrade; not in-app updater",
               "network_interfaces": ["lo"],
               "os_release": Path("/etc/os-release").read_text()}
     output = Path("/evidence")
     output.mkdir(exist_ok=True)
     try:
-        versions = []
-        for package in (args.older, args.newer):
-            if command("dpkg-deb", "-f", str(package), "Package") != "drake-star":
-                raise ValueError("Expected official drake-star package")
-            if command("dpkg-deb", "-f", str(package), "Architecture") != "amd64":
-                raise ValueError("Fixture requires amd64 packages")
-            versions.append(command("dpkg-deb", "-f", str(package), "Version"))
-        subprocess.run(["dpkg", "--compare-versions", versions[0], "lt", versions[1]],
-                       check=True, timeout=5)
-        installed = subprocess.run(["dpkg-query", "-W", "drake-star"],
+        versions = [backend.version(package) for package in (args.older, args.newer)]
+        backend.require_upgrade(*versions)
+        installed = subprocess.run(backend.query(),
                                    capture_output=True, timeout=5)
         if installed.returncode == 0:
             raise ValueError("Launcher already installed: use a fresh container")
@@ -62,12 +51,10 @@ def main():
             result["steps"].append(step)
             phase = output / ("install" if index == 0 else "upgrade")
             phase.mkdir()
-            (phase / "dpkg.log").write_text(command("dpkg", "--install", str(package)))
-            actual = command("dpkg-query", "-W", "-f=${Version}", "drake-star")
+            (phase / (backend.name + ".log")).write_text(backend.install(package))
+            actual = command(*backend.query())
             if actual != version:
                 raise ValueError(f"Installed version {actual}, expected {version}")
-            if command("dpkg", "--audit"):
-                raise ValueError("dpkg audit failed")
             desktops = list(Path("/usr/share/applications").glob("*Drake*.desktop"))
             if len(desktops) != 1:
                 raise ValueError(f"Expected one launcher desktop entry, got {desktops}")
@@ -76,10 +63,7 @@ def main():
             executable = shlex.split(fields["Exec"])
             if executable != ["drakestar-launcher"] or fields.get("Terminal") != "false":
                 raise ValueError("Unexpected desktop entry")
-            with tempfile.TemporaryDirectory(prefix="launcher-package-") as directory:
-                command("dpkg-deb", "--extract", str(package), directory)
-                packaged = Path(directory) / "usr/bin/drakestar-launcher"
-                expected_binary = digest(packaged)
+            expected_binary = backend.payload_digest(package)
             if digest(Path("/usr/bin/drakestar-launcher")) != expected_binary:
                 raise ValueError("Installed executable differs from package payload")
             step["installed_binary_sha256"] = expected_binary
@@ -88,7 +72,8 @@ def main():
                 subprocess.run([
                     "runuser", "-u", "smoke", "--", "env",
                     "DRAKESTAR_DATA_DIR=" + str(data), "LIBGL_ALWAYS_SOFTWARE=1",
-                    "DRAKESTAR_GUI_ONBOARDING=" + ("1" if version == "0.6.0" else "0"),
+                    "DRAKESTAR_GUI_ONBOARDING=" + (
+                        "1" if version in ("0.6.0", "0:0.6.0-1") else "0"),
                     "GDK_BACKEND=x11", "WEBKIT_DISABLE_DMABUF_RENDERER=1",
                     # WebKit's nested namespace sandbox cannot run under Docker's
                     # default seccomp. Only this offline, disposable fixture opts out.

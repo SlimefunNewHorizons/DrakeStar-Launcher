@@ -52,6 +52,42 @@ Minecraft y la instalación en una máquina física o VM con escritorio completo
 Los artefactos del actualizador y su firma se describen en la
 [documentación oficial de Tauri](https://v2.tauri.app/plugin/updater/).
 
+## Instalación y actualización RPM en Fedora limpio
+
+El mismo runner acepta dos `.rpm` y `Dockerfile.rpm` prepara Fedora 43 x86_64
+fijado por digest, con las dependencias gráficas y sin el launcher instalado.
+La preparación usa DNF; el ensayo sin red instala y actualiza con
+[`rpm --upgrade`](https://rpm.org/docs/latest/man/rpm.8.html), conservando
+las comprobaciones de dependencias y verificando los archivos instalados.
+Compara epoch/versión/release mediante RPM y exige un avance estricto; no
+acepta mezclas de formatos ni paquetes de otra identidad o arquitectura.
+
+```bash
+mkdir -p /tmp/drakestar-rpms /tmp/drakestar-rpm-evidence
+gh release download v0.5.2 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.rpm' --dir /tmp/drakestar-rpms
+gh release download v0.6.0 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.rpm' --dir /tmp/drakestar-rpms
+~/ai-hub/scripts/build_seguro.sh 25 "$PWD" docker build -f tools/e2e/linux-install/Dockerfile.rpm -t drakestar-installer-rpm tools/e2e/linux-install
+docker run --rm --init --cpus 1 --memory 2g --pids-limit 512 --network none \
+  -v /tmp/drakestar-rpms:/packages:ro \
+  -v /tmp/drakestar-rpm-evidence:/evidence \
+  drakestar-installer-rpm /packages/DrakeStar-0.5.2-1.x86_64.rpm /packages/DrakeStar-0.6.0-1.x86_64.rpm
+```
+
+Usar una carpeta de evidencia vacía en cada ejecución. Conserva los mismos
+controles de centinela sintético, payload SHA-256, capturas y bienvenida de
+Debian; los logs de transacciones se llaman `rpm.log`. Las capturas requieren
+revisión visual. Los SHA identifican los paquetes descargados y sus payloads;
+no acreditan firma editorial ni correspondencia fuente→binario. El alcance
+continúa siendo el gestor de paquetes en un contenedor, sin actualizador
+interno, MSI, escritorio completo ni juego real.
+
+Ensayo del 17-nov-2026: instalación 0.5.2 → actualización 0.6.0 completadas en
+Fedora 43 nuevo y sin red, con las tres capturas revisadas y ambos ajustes de
+bienvenida guardados por la aplicación. El mismo runner volvió a pasar en
+Ubuntu 24.04.5 para descartar regresiones Debian. Ambos terminaron con salida
+0; las 14 regresiones Python del fixture pasaron. Fedora no emitió mensajes
+en el log de la app; Ubuntu conservó su aviso AT-SPI de la imagen mínima.
+
 Regresión del propio capturador, sin abrir ventanas ni instalar paquetes:
 
 ```bash

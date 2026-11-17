@@ -4,6 +4,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     dbus-x11 openbox fonts-dejavu-core ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 smoke
-COPY install-smoke.py gui-probe.py /fixture/
+COPY install-smoke.py gui-probe.py package_backend.py /fixture/
 ENV DRAKESTAR_INSTALL_FIXTURE=1
 ENTRYPOINT ["python3", "/fixture/install-smoke.py"]
