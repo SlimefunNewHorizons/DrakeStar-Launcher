@@ -7,6 +7,7 @@ src-tauri/gen/
 *.bundle
 .env
 *.log
+__pycache__/
 graphify-out/
 
 # claves de firma del updater (NUNCA se versionan)

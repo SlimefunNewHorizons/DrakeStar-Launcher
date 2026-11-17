@@ -81,11 +81,12 @@ Probado sobre los archivos **publicados** (no solo sobre compilaciones locales):
 | Flujo de release | etiqueta `v0.6.0` → Linux, Windows y macOS en verde; `latest.json` con firma en 11 plataformas | ok |
 | Windows (`.msi`) | extraído con `msiexec /a` (sin instalar), WebView2 + `tools/e2e/cdp-shot.mjs`: bienvenida, cuenta sin premium, JUGAR → Minecraft 1.21.11 abierto, «Cerrar el juego» sin falso fallo (código 1 de `TerminateProcess`), «Buscar actualizaciones» → «Ya tienes la última versión» | ok |
 | Linux (`.AppImage`) | WSL2 + Xvfb: arranca y muestra la interfaz | ok |
+| Linux (`.deb`, ensayo 2026-11-17) | Ubuntu 24.04 nuevo en Docker, sin red: instalar 0.5.2, abrir GUI como UID 10001, actualizar por `dpkg` a 0.6.0 y abrir su GUI; ambas capturas revisadas, binarios idénticos al payload y archivo centinela sintético intacto | ok en contenedor Xvfb |
 | Actualizador | app compilada con versión 0.5.99 detecta la 0.6.0 en el `latest.json` publicado (banner y botón «Actualizar y reiniciar») | detección ok |
 | Web | `POST /api/launcher/report` en producción → 202; el zip se lee desde Star (0644) | ok |
 | Fused | jar publicado verificado por SHA-256 y probado en 1.21.1 y 26.2 (antes, 1.20.1, 1.21.11 y 26.1) | ok |
 
-**No probado** (necesita máquinas limpias o cuentas reales): instalación real del `.msi`/`.exe` y del `.deb`/`.rpm`, macOS (`.dmg`, no está firmado ni notarizado), la **instalación** de una actualización (solo su detección) y el login de Microsoft completo (falta el client ID propio).
+**No probado** (necesita máquinas limpias o cuentas reales): instalación real del `.msi`/`.exe` y `.rpm`, macOS (`.dmg`, no está firmado ni notarizado), la **instalación de una actualización desde la aplicación** (solo su detección) y el login de Microsoft completo (falta el client ID propio). El ensayo `.deb` acredita instalación y actualización mediante el gestor de paquetes en un contenedor; no un escritorio físico/VM ni partidas reales. Ambos arranques mostraron un aviso AT-SPI por ausencia del bus de accesibilidad en la imagen mínima, sin impedir render ni captura. Reproducción: `tools/e2e/README.md`, sección de instalación Debian.
 
 ## Problemas frecuentes
 
