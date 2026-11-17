@@ -53,5 +53,55 @@ class CaptureLifecycleTest(unittest.TestCase):
             self.assertTrue(report["render_requires_visual_review"])
 
 
+class OnboardingTest(unittest.TestCase):
+    def exercise(self, directory, *, initial=None, persist=True, exit_during_capture=False):
+        data = Path(directory)
+        settings = data / "settings.json"
+        settings.write_text(json.dumps(initial if initial is not None else {
+            "first_run_done": False, "send_reports": True, "device_id": "synthetic"}))
+        app = MagicMock()
+        app.poll.return_value = None
+
+        def run(arguments, **kwargs):
+            if arguments[:2] == ["xdotool", "mousemove"] and persist:
+                settings.write_text(json.dumps({"first_run_done": True,
+                                                 "send_reports": False,
+                                                 "device_id": "synthetic"}))
+            if arguments[0] == "import" and exit_during_capture:
+                app.poll.return_value = 3
+            return subprocess.CompletedProcess(arguments, 0)
+
+        with (patch.object(probe.subprocess, "run", side_effect=run) as commands,
+              patch.object(probe.time, "sleep"),
+              patch.object(probe.time, "monotonic", side_effect=[0, 0, 9])):
+            try:
+                return probe.complete_onboarding(app, "42", data, data)
+            finally:
+                if initial is not None:
+                    commands.assert_not_called()
+
+    def test_ui_must_write_both_settings_without_exporting_identifier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(self.exercise(directory), {
+                "settings_saved_by_ui": True, "first_run_done": True,
+                "send_reports": False})
+
+    def test_missing_ipc_write_fails_even_when_launcher_is_alive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "did not persist"):
+                self.exercise(directory, persist=False)
+
+    def test_preexisting_success_is_rejected_before_ui_actions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "fresh default settings"):
+                self.exercise(directory, initial={"first_run_done": True,
+                                                  "send_reports": False})
+
+    def test_exit_during_onboarding_capture_cannot_report_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "exited during onboarding capture"):
+                self.exercise(directory, exit_during_capture=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Regresiones del capturador e IPC del instalador
+        run: python3 -m unittest discover -s tools/e2e/linux-install -p 'test_*.py' -v
       - uses: dtolnay/rust-toolchain@stable
       # Logica sin Tauri: no necesita librerias graficas
       - run: cargo test -p drakestar-mc -p drakestar-core -p drakestar-net -p drakestar-app -p drakestar-cli

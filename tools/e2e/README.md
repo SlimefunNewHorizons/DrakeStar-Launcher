@@ -42,7 +42,12 @@ de Docker en lugar de su sandbox de namespaces y render por software en Xvfb.
 La ejecución directa en el host se rechaza antes de instalar.
 
 Esto comprueba el instalador `.deb` y la actualización mediante el gestor de
-paquetes. Quedan aparte el actualizador firmado de la aplicación, `.rpm`, `.msi`,
+paquetes. Para 0.6.0, también desactiva los reportes y pulsa «Empezar» mediante
+clics X11 en una ventana de 1100×720 (coordenadas propias de esa versión):
+exige que el backend guarde ambos ajustes desde sus
+valores iniciales y captura `onboarding.png`. No exporta identificadores de
+dispositivo ni escribe esos ajustes desde el guion. Quedan aparte el
+actualizador firmado de la aplicación, `.rpm`, `.msi`,
 Minecraft y la instalación en una máquina física o VM con escritorio completo.
 Los artefactos del actualizador y su firma se describen en la
 [documentación oficial de Tauri](https://v2.tauri.app/plugin/updater/).

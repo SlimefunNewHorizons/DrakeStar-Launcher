@@ -88,6 +88,7 @@ def main():
                 subprocess.run([
                     "runuser", "-u", "smoke", "--", "env",
                     "DRAKESTAR_DATA_DIR=" + str(data), "LIBGL_ALWAYS_SOFTWARE=1",
+                    "DRAKESTAR_GUI_ONBOARDING=" + ("1" if version == "0.6.0" else "0"),
                     "GDK_BACKEND=x11", "WEBKIT_DISABLE_DMABUF_RENDERER=1",
                     # WebKit's nested namespace sandbox cannot run under Docker's
                     # default seccomp. Only this offline, disposable fixture opts out.
