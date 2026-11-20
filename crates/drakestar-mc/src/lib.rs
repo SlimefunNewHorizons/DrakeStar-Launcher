@@ -11,12 +11,16 @@
 //! ```
 
 pub mod accounts;
+pub mod catalog;
 pub mod assets;
 pub mod error;
+pub mod ely;
 pub mod fabric;
 pub mod horizon;
 pub mod install;
 pub mod instances;
+pub mod importing;
+pub mod memory;
 pub mod java;
 pub mod launch;
 pub mod manifest;

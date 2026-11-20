@@ -1,10 +1,10 @@
-export type Kind = 'microsoft' | 'offline';
+export type Kind = 'microsoft' | 'offline' | 'elyby';
 export interface Account { id: string; kind: Kind; name: string; uuid: string; added_at: number; last_used?: number | null }
 export interface AccountList { accounts: Account[]; default: string | null }
 
 export type Target = { kind: 'menu' } | { kind: 'server'; address: string } | { kind: 'world'; name: string } | { kind: 'local'; port: number; lan: boolean };
 export interface Instance {
-  id: string; name: string; mc: string; loader: 'vanilla' | 'fabric'; target: Target;
+  id: string; name: string; mc: string; loader: 'vanilla' | 'fabric'; loader_version?: string | null; target: Target;
   performance: boolean; fused: boolean; xmx_mb: number; extra_jvm: string[]; note: string;
 }
 
@@ -28,3 +28,10 @@ export type GameStateName = 'preparing' | 'running' | 'exited' | 'crashed' | 'er
 export interface GameState { state: GameStateName; message: string; code?: number | null; warnings: string[] }
 export interface MsaEvent { phase: 'working' | 'success' | 'error' | 'cancelled'; message: string; account?: Account | null }
 export interface ReportInfo { path: string; sent: boolean }
+
+export interface MemoryProfile { total_mb: number; recommended_mb: number; max_mb: number }
+export interface ImportPreview { format: string; instance: Instance }
+
+export type ContentKind = 'mod' | 'resourcepack' | 'shader';
+export interface CatalogHit { project_id: string; slug: string; title: string; description: string }
+export interface CatalogEntry { project_id: string; version_id: string; title: string; kind: ContentKind; filename: string; sha512: string; dependencies: string[]; owned: boolean }

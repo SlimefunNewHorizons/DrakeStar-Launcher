@@ -2,12 +2,14 @@
   import { api } from '../lib/api';
   import ConfirmButton from '../components/ConfirmButton.svelte';
   import Icon from '../components/Icon.svelte';
+  import ImportForm from '../components/ImportForm.svelte';
   import InstanceForm from '../components/InstanceForm.svelte';
   import { fmtRam, loaderLabel, targetLabel } from '../lib/format';
   import { t } from '../lib/i18n.svelte';
   import { app } from '../lib/store.svelte';
   import type { Instance } from '../lib/types';
 
+  let importing = $state(false);
   // undefined = formulario cerrado, null = instancia nueva
   let editing = $state<Instance | null | undefined>(undefined);
 </script>
@@ -19,6 +21,7 @@
         <h1>{t('ins.title')}</h1>
         <p class="muted">{t('ins.subtitle')}</p>
       </div>
+      <button class="btn" type="button" onclick={() => (importing = true)}>{t('import.title')}</button>
       <button class="btn primary" type="button" onclick={() => (editing = null)}><Icon name="plus" /> {t('ins.new')}</button>
     </div>
   </header>
@@ -38,7 +41,7 @@
         </div>
         <div class="row" style="gap:8px; flex:none">
           <button class="btn sm" type="button" onclick={() => (editing = i)}><Icon name="edit" /> {t('ins.edit')}</button>
-          <button class="btn sm ghost" type="button" title={t('common.open_folder')} aria-label={t('common.open_folder')} onclick={() => api.openFolder('instance', i.id)}><Icon name="folder" /></button>
+          <button class="btn sm ghost" type="button" title={t('common.open_folder')} aria-label={t('common.open_folder')} onclick={() => app.openInstanceFolder(i.id)}><Icon name="folder" /></button>
           <ConfirmButton label={t('ins.delete')} onconfirm={() => app.deleteInstance(i.id)} />
         </div>
       </div>
@@ -51,3 +54,5 @@
     <InstanceForm initial={editing} onclose={() => (editing = undefined)} />
   {/key}
 {/if}
+
+{#if importing}<ImportForm onclose={() => (importing = false)} />{/if}

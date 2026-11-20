@@ -115,6 +115,15 @@ fn account_add_offline(st: State<'_, AppState>, name: String) -> Res<Account> {
     Accounts::new(&st.dirs).add_offline(name.trim()).map_err(s)
 }
 #[tauri::command]
+async fn account_add_elyby(st: State<'_, AppState>, username: String, password: String, totp: String) -> Res<Account> {
+    let dirs = st.dirs.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let client_token = Settings::load(&dirs).device_id;
+        let (session, token) = drakestar_mc::ely::authenticate(&username, &password, &totp, &client_token).map_err(s)?;
+        Accounts::new(&dirs).add_elyby(&session, &token).map_err(s)
+    }).await.map_err(|_| "No se pudo completar el acceso Ely.by.".to_string())?
+}
+#[tauri::command]
 fn account_remove(st: State<'_, AppState>, id: String) -> Res<()> {
     Accounts::new(&st.dirs).remove(&id).map_err(s)
 }
@@ -193,11 +202,30 @@ fn instances_list(st: State<'_, AppState>) -> Vec<Instance> {
     Instances::new(&st.dirs).list()
 }
 #[tauri::command]
+fn memory_profile() -> drakestar_mc::memory::MemoryProfile {
+    drakestar_mc::memory::MemoryProfile::detect()
+}
+#[tauri::command]
+async fn instance_import_preview(st: State<'_, AppState>, source: String) -> Res<drakestar_mc::importing::Preview> {
+    let dirs = st.dirs.clone();
+    tauri::async_runtime::spawn_blocking(move || drakestar_mc::importing::preview(&dirs, std::path::Path::new(&source)).map_err(s)).await.map_err(s)?
+}
+#[tauri::command]
+async fn instance_import(st: State<'_, AppState>, source: String) -> Res<Instance> {
+    if st.busy.swap(true, Ordering::SeqCst) { return Err("Ya hay una partida o una importacion en curso.".into()); }
+    let dirs = st.dirs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || drakestar_mc::importing::import(&dirs, std::path::Path::new(&source)).map_err(s)).await.map_err(s);
+    st.busy.store(false, Ordering::SeqCst);
+    result?
+}
+#[tauri::command]
 fn instance_save(st: State<'_, AppState>, instance: Instance) -> Res<Instance> {
+    if st.busy.load(Ordering::SeqCst) { return Err("Espera a que termine la operación o cierra el juego antes de editar instancias.".into()); }
     Instances::new(&st.dirs).upsert(instance).map_err(s)
 }
 #[tauri::command]
 fn instance_delete(st: State<'_, AppState>, id: String) -> Res<()> {
+    if st.busy.load(Ordering::SeqCst) { return Err("Espera a que termine la operación o cierra el juego antes de borrar instancias.".into()); }
     Instances::new(&st.dirs).remove(&id).map_err(s)
 }
 #[tauri::command]
@@ -209,6 +237,30 @@ async fn versions_supported(st: State<'_, AppState>) -> Res<Vec<String>> {
     })
     .await
     .map_err(s)?
+}
+
+// ---------- catálogo por instancia ----------
+#[tauri::command]
+async fn catalog_search(st: State<'_, AppState>, instance: String, kind: drakestar_mc::catalog::Kind, query: String) -> Res<Vec<drakestar_mc::catalog::Hit>> {
+    let inst = Instances::new(&st.dirs).get(&instance).map_err(s)?;
+    tauri::async_runtime::spawn_blocking(move || drakestar_mc::catalog::search(&inst, kind, &query).map_err(s)).await.map_err(s)?
+}
+#[tauri::command]
+fn catalog_list(st: State<'_, AppState>, instance: String) -> Res<Vec<drakestar_mc::catalog::Entry>> {
+    let inst = Instances::new(&st.dirs).get(&instance).map_err(s)?;
+    drakestar_mc::catalog::list(&st.dirs, &inst).map_err(s)
+}
+#[tauri::command]
+async fn catalog_change(st: State<'_, AppState>, instance: String, kind: drakestar_mc::catalog::Kind, project: String, remove: bool) -> Res<Vec<drakestar_mc::catalog::Entry>> {
+    let inst = Instances::new(&st.dirs).get(&instance).map_err(s)?;
+    if st.busy.swap(true, Ordering::SeqCst) { return Err("Cierra el juego y espera a que termine la operación en curso.".into()); }
+    let dirs = st.dirs.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        if remove { drakestar_mc::catalog::remove(&dirs, &inst, &project) }
+        else { drakestar_mc::catalog::install(&dirs, &inst, kind, &project) }.map_err(s)
+    }).await.map_err(s);
+    st.busy.store(false, Ordering::SeqCst);
+    result?
 }
 
 // ---------- jugar ----------
@@ -369,7 +421,11 @@ fn game_kill(st: State<'_, AppState>) {
 #[tauri::command]
 fn logs_read(st: State<'_, AppState>, source: String, instance: Option<String>, max_lines: usize) -> Vec<String> {
     let path = match (source.as_str(), instance) {
-        ("game", Some(id)) if safe_id(&id) => st.dirs.instance(&id).join("logs").join("latest.log"),
+        ("game", Some(id)) if safe_id(&id) => {
+            let logs = st.dirs.instance(&id).join("logs");
+            let session = logs.join("launcher-session.log");
+            if session.exists() { session } else { logs.join("latest.log") }
+        },
         _ => support::log_dir(&st.dirs).join("launcher.log"),
     };
     let path = if source == "launcher" {
@@ -464,9 +520,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            app_info, settings_get, settings_set, accounts_list, account_add_offline, account_remove, account_set_default,
-            msa_start, msa_cancel, instances_list, instance_save, instance_delete, versions_supported,
-            play, play_cancel, game_kill, logs_read, support_report, open_folder, open_url,
+            app_info, settings_get, settings_set, accounts_list, account_add_offline, account_add_elyby, account_remove, account_set_default,
+            msa_start, msa_cancel, instances_list, memory_profile, instance_import_preview, instance_import, instance_save, instance_delete, versions_supported,
+            catalog_search, catalog_list, catalog_change, play, play_cancel, game_kill, logs_read, support_report, open_folder, open_url,
             horizon::horizon_status, horizon::horizon_install, horizon::horizon_play, horizon::horizon_stop
         ])
         .run(tauri::generate_context!())

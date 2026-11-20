@@ -1,5 +1,13 @@
 # Cambios
 
+## Sin publicar
+
+**Nuevo**
+- **Catálogo Modrinth** por instancia para mods Fabric, resource packs y shaders: filtro de versión, instalar/quitar, dependencias requeridas, Iris para shaders, SHA-512 y protección de archivos externos.
+- **Cuentas Ely.by** con 2FA, renovación de token y authlib-injector oficial fijado y verificado; disponibles junto a Microsoft y sin premium. Pendiente validación con cuenta real.
+- **Diagnóstico** reúne fallo/etapa/instancia y salida de juego con regreso a Jugar, cuentas o edición. Carpeta de instancia accesible también desde Jugar y Catálogo, con errores visibles.
+- Alcance, pruebas y evaluación separada de Starling Android: [docs/STARLING.md](docs/STARLING.md); atribuciones en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## 0.7.1 — Zero-Config, Slimefun Local Auto-Connect & Horizon JAVA_HOME fix (2026-11-19)
 
 **Arreglado**

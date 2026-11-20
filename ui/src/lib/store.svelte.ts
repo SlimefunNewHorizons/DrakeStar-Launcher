@@ -2,9 +2,9 @@
 import { api, checkUpdate, listen, type UpdateInfo } from './api';
 import { errText } from './format';
 import { setLang, t } from './i18n.svelte';
-import type { Account, AccountList, AppInfo, DeviceCode, GameState, GameStateName, HzStatus, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
+import type { MemoryProfile, Account, AccountList, AppInfo, DeviceCode, GameState, GameStateName, HzStatus, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
 
-export type View = 'play' | 'accounts' | 'instances' | 'settings' | 'logs';
+export type View = 'play' | 'accounts' | 'instances' | 'settings' | 'logs' | 'catalog';
 export type Phase = 'idle' | GameStateName;
 export interface Toast { id: number; kind: 'info' | 'ok' | 'error'; text: string }
 export interface MsaUi { open: boolean; step: 'starting' | 'waiting' | 'working' | 'error'; code: DeviceCode | null; message: string }
@@ -17,16 +17,20 @@ class Store {
   info = $state<AppInfo | null>(null);
   settings = $state<Settings | null>(null);
   accounts = $state<AccountList>({ accounts: [], default: null });
+  memory = $state<MemoryProfile | null>(null);
   instances = $state<Instance[]>([]);
   versions = $state<string[]>([]);
   selected = $state<string | null>(null);
 
+  catalogBusy = $state(false);
   phase = $state<Phase>('idle');
   message = $state('');
   exitCode = $state<number | null>(null);
   warnings = $state<string[]>([]);
   progress = $state<Progress | null>(null);
   gameLines = $state<string[]>([]);
+  attemptInstance = $state<Instance | null>(null);
+  failedStage = $state('');
   report = $state<ReportInfo | null>(null);
 
   update = $state<UpdateInfo | null>(null);
@@ -46,7 +50,7 @@ class Store {
     return l.accounts.find((a) => a.id === l.default) ?? l.accounts[0] ?? null;
   }
   get busy(): boolean {
-    return this.phase === 'preparing' || this.phase === 'running';
+    return this.catalogBusy || this.phase === 'preparing' || this.phase === 'running';
   }
 
   toast(kind: Toast['kind'], text: string) {
@@ -67,7 +71,8 @@ class Store {
       listen<ReportInfo>('report', (r) => (this.report = r)),
     ]);
     try {
-      const [info, settings] = await Promise.all([api.appInfo(), api.settingsGet()]);
+      const [info, settings, memory] = await Promise.all([api.appInfo(), api.settingsGet(), api.memoryProfile()]);
+      this.memory = memory;
       this.info = info;
       this.settings = settings;
       setLang(settings.language);
@@ -149,6 +154,9 @@ class Store {
   }
 
   // ---------- instancias ----------
+  async openInstanceFolder(id: string) {
+    try { await api.openFolder('instance', id); } catch (e) { this.toast('error', errText(e)); }
+  }
   select(id: string) {
     this.selected = id;
   }
@@ -184,6 +192,8 @@ class Store {
     const inst = this.instance;
     if (!inst || this.busy) return;
     this.phase = 'preparing';
+    this.attemptInstance = $state.snapshot(inst);
+    this.failedStage = '';
     this.message = '';
     this.exitCode = null;
     this.warnings = [];
@@ -195,6 +205,7 @@ class Store {
     } catch (e) {
       this.phase = 'error';
       this.message = errText(e);
+      this.view = 'logs';
     }
   }
 
@@ -241,6 +252,10 @@ class Store {
   killGame() { api.gameKill().catch(() => {}); }
 
   private onGameState(g: GameState) {
+    if (g.state === 'error' || g.state === 'crashed') {
+      this.failedStage = this.progress?.text ?? '';
+      this.view = 'logs';
+    }
     this.phase = g.state;
     this.message = g.message;
     this.exitCode = g.code ?? null;
@@ -256,7 +271,7 @@ class Store {
   // ---------- soporte ----------
   async makeReport(send: boolean) {
     try {
-      const r = await api.report(this.instance?.id ?? null, send);
+      const r = await api.report(this.attemptInstance?.id ?? this.instance?.id ?? null, send);
       this.report = r;
       this.toast('ok', r.sent ? t('log.sent') : t('log.saved', { path: r.path }));
     } catch (e) {

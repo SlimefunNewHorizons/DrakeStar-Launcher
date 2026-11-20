@@ -10,13 +10,15 @@
 
   const blank = (): Instance => ({
     id: '', name: '', mc: app.versions.find((v) => v === '1.21.11') ?? app.versions[0] ?? '1.21.11', loader: 'fabric', target: { kind: 'menu' },
-    performance: true, fused: false, xmx_mb: 3072, extra_jvm: [], note: '',
+    performance: true, fused: false, xmx_mb: app.memory?.recommended_mb ?? 3072, extra_jvm: [], note: '',
   });
 
   let draft = $state<Instance>(untrack(() => (initial ? JSON.parse(JSON.stringify(initial)) : blank())));
   let tkind = $state<Target['kind']>(untrack(() => draft.target.kind));
   let taddr = $state(untrack(() => (draft.target.kind === 'server' ? draft.target.address : '')));
   let tworld = $state(untrack(() => (draft.target.kind === 'world' ? draft.target.name : '')));
+  let tport = $state(untrack(() => (draft.target.kind === 'local' ? draft.target.port : 25570)));
+  let tlan = $state(untrack(() => (draft.target.kind === 'local' ? draft.target.lan : false)));
   let jvm = $state(untrack(() => draft.extra_jvm.join(' ')));
   let error = $state('');
   let saving = $state(false);
@@ -31,7 +33,11 @@
   async function save(e: Event) {
     e.preventDefault();
     const name = draft.name.trim();
-    const target: Target = draft.target.kind === 'local' ? draft.target : tkind === 'server' ? { kind: 'server', address: taddr.trim() } : tkind === 'world' ? { kind: 'world', name: tworld.trim() } : { kind: 'menu' };
+    const target: Target =
+      tkind === 'local' ? { kind: 'local', port: tport, lan: tlan } :
+      tkind === 'server' ? { kind: 'server', address: taddr.trim() } :
+      tkind === 'world' ? { kind: 'world', name: tworld.trim() } :
+      { kind: 'menu' };
     const inst: Instance = {
       ...$state.snapshot(draft), id: draft.id || slug(name), name, target, mc: draft.mc.trim(),
       performance: fabric && draft.performance, fused: fabric && draft.fused, extra_jvm: jvm.split(/\s+/).filter(Boolean),
@@ -76,12 +82,20 @@
         <button type="button" class:on={tkind === 'menu'} onclick={() => (tkind = 'menu')}>{t('f.t_menu')}</button>
         <button type="button" class:on={tkind === 'server'} onclick={() => (tkind = 'server')}>{t('f.t_server')}</button>
         <button type="button" class:on={tkind === 'world'} onclick={() => (tkind = 'world')}>{t('f.t_world')}</button>
+        <button type="button" class:on={tkind === 'local'} onclick={() => (tkind = 'local')}>{t('f.t_local')}</button>
       </div>
     </div>
     {#if tkind === 'server'}
       <label class="field"><span>{t('f.address')}</span><input type="text" bind:value={taddr} placeholder="mc.drakescraft.cl:25565" required spellcheck="false" /></label>
     {:else if tkind === 'world'}
       <label class="field"><span>{t('f.world')}</span><input type="text" bind:value={tworld} required /></label>
+    {:else if tkind === 'local'}
+      <label class="field"><span>{t('f.port')}</span><input type="number" min="1024" max="65535" bind:value={tport} required /></label>
+      <label class="switch">
+        <input type="checkbox" bind:checked={tlan} />
+        <span class="track"></span>
+        <span class="txt"><span>{t('f.lan')}</span><span class="small muted">{t('f.lan_hint')}</span></span>
+      </label>
     {/if}
 
     <label class="switch">
@@ -95,7 +109,12 @@
       <span class="txt"><span>{t('f.fused')}</span><span class="small muted">{fabric ? t('f.fused_hint') : t('f.fabric_only')}</span></span>
     </label>
 
-    <label class="field"><span>{t('f.ram')}: <strong>{fmtRam(draft.xmx_mb)}</strong></span><input type="range" min="1024" max="16384" step="512" bind:value={draft.xmx_mb} /></label>
+    <label class="field"><span>{t('f.ram')}: <strong>{fmtRam(draft.xmx_mb)}</strong></span><input type="range" min="1024" max={Math.max(app.memory?.max_mb ?? 16384, draft.xmx_mb)} step="256" bind:value={draft.xmx_mb} /></label>
+
+    {#if app.memory}
+      <p class="small muted">{t('f.memory_hint', { total: fmtRam(app.memory.total_mb), recommended: fmtRam(app.memory.recommended_mb) })}</p>
+      <button class="btn sm" type="button" onclick={() => (draft.xmx_mb = app.memory!.recommended_mb)}>{t('f.memory_apply')}</button>
+    {/if}
 
     <details>
       <summary>{t('common.advanced')}</summary>

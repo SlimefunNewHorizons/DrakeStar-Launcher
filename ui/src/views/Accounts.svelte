@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ElybyForm from '../components/ElybyForm.svelte';
   import Avatar from '../components/Avatar.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
   import Icon from '../components/Icon.svelte';
@@ -21,7 +22,7 @@
         <div class="grow">
           <h2 class="ellipsis">{a.name}</h2>
           <div class="row" style="gap:6px">
-            <span class="chip" class:ms={a.kind === 'microsoft'}>{a.kind === 'microsoft' ? t('acc.microsoft') : t('acc.offline')}</span>
+            <span class="chip" class:ms={a.kind === 'microsoft'}>{t('acc.' + a.kind)}</span>
             {#if isDefault}<span class="chip gold">{t('acc.default')}</span>{/if}
           </div>
         </div>
@@ -44,6 +45,11 @@
       <h2>{t('acc.add_off')}</h2>
       <p class="small muted">{t('acc.add_off_hint')}</p>
       <OfflineForm />
+    </div>
+    <div class="card stack">
+      <h2>Ely.by</h2>
+      <p class="small muted">{t('ely.hint')}</p>
+      <ElybyForm />
     </div>
   </section>
 </div>

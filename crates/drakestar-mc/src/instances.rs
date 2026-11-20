@@ -32,6 +32,8 @@ pub struct Instance {
     pub name: String,
     pub mc: String,
     pub loader: Loader,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
     pub target: Target,
     /// Instala Sodium, Lithium, FerriteCore... (solo Fabric).
     #[serde(default)]
@@ -59,6 +61,11 @@ impl Instance {
         if !crate::manifest::supported(&self.mc) {
             return Err(McError::Invalid(format!("Minecraft {} esta fuera del rango soportado ({} a {})", self.mc, crate::manifest::MIN_SUPPORTED, crate::manifest::MAX_SUPPORTED)));
         }
+        if let Some(v) = &self.loader_version {
+            if v.is_empty() || v.len() > 64 || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_') {
+                return Err(McError::Invalid("version de loader no valida".into()));
+            }
+        }
         if (self.performance || self.fused) && self.loader != Loader::Fabric {
             return Err(McError::Invalid("los mods de rendimiento y Fused necesitan Fabric".into()));
         }
@@ -79,6 +86,7 @@ pub fn presets() -> Vec<Instance> {
             id: "drakescraft".into(),
             name: "DrakesCraft (online)".into(),
             mc: "1.21.11".into(),
+            loader_version: None,
             loader: Loader::Fabric,
             target: Target::Server { address: "mc.drakescraft.cl:25565".into() },
             performance: true,
@@ -91,6 +99,7 @@ pub fn presets() -> Vec<Instance> {
             id: "slimefun-solo".into(),
             name: "Slimefun en solitario / LAN".into(),
             mc: "26.2".into(),
+            loader_version: None,
             loader: Loader::Fabric,
             target: Target::Local { port: 25570, lan: false },
             performance: true,
@@ -103,6 +112,7 @@ pub fn presets() -> Vec<Instance> {
             id: "vanilla-latest".into(),
             name: "Minecraft vanilla".into(),
             mc: "1.21.11".into(),
+            loader_version: None,
             loader: Loader::Vanilla,
             target: Target::Menu,
             performance: false,
