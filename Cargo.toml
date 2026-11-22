@@ -1,13 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/drakestar-core",
-  "crates/drakestar-cli",
   "crates/drakestar-net",
-  "crates/drakestar-app",
-  "crates/drakestar-rust-client",
   "crates/drakestar-mc",
-  "crates/drakestar-native-example",
   "src-tauri",
 ]
 

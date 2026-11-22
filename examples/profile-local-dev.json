@@ -1,3 +1,0 @@
-{ "schema": 1, "id": "local-dev", "name": "Local Dev (Slimefun)", "mode": "local-server", "channel": "unstable",
-  "minecraft": "26.2", "java": { "major": 25, "min_mem_mb": 2048, "max_mem_mb": 6144 }, "preset": "slimefun",
-  "notes": "Servidor de pruebas DrakesPurpur con el preset Slimefun." }

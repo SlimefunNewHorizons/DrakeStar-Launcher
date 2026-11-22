@@ -32,9 +32,9 @@ crates/drakestar-net  (descargas https con SHA-256 en streaming)
 | `instances`, `settings` | instancias y plantillas, ajustes (idioma, privacidad, client ID) |
 | `support` | registros con rotación, tachador de datos personales, paquete de reporte y envío |
 
-## Crates heredados
+## Crates heredados (retirados)
 
-`drakestar-core`, `drakestar-app`, `drakestar-cli`, `drakestar-rust-client`, `drakestar-native-example` son del diseño anterior (perfiles, servidor local DrakesPurpur, cliente Rust de Horizon). **La app ya no los usa**; siguen en el workspace y en CI hasta decidir su destino (el cliente Rust volverá cuando exista la integración con Horizon, ver [LAUNCHER.md](LAUNCHER.md#horizon-cliente-rust-minecraft-263)).
+`drakestar-core`, `drakestar-app`, `drakestar-cli`, `drakestar-rust-client` y `drakestar-native-example` (perfiles, intermediario/hooks nativos, análisis de mods, cliente Rust de Horizon) eran del diseño anterior y la app no los usaba: se retiraron del workspace y de CI. El código, junto con `docs/PROFILES.md`, `docs/INTERMEDIARIO.md` y sus ejemplos, sigue en el tag `v0.7.1`; para recuperar uno: `git checkout v0.7.1 -- crates/<crate>` y volver a añadirlo a `members` (el cliente Rust volverá así cuando exista la integración con Horizon, ver [LAUNCHER.md](LAUNCHER.md#horizon-cliente-rust-minecraft-263)).
 
 ## Seguridad
 
