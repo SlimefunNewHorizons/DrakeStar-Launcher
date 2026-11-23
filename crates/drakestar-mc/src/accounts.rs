@@ -14,6 +14,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Microsoft,
+    Elyby,
     Offline,
 }
 
@@ -69,12 +70,18 @@ impl Accounts {
     }
 
     fn save_secrets(&self, m: &BTreeMap<String, String>) -> McResult<()> {
+        std::fs::create_dir_all(&self.dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.dir, std::fs::Permissions::from_mode(0o700))?;
+        }
         let p = self.secrets_path();
         write_atomic(&p, serde_json::to_string(m)?.as_bytes())?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600))?;
         }
         Ok(())
     }
@@ -106,6 +113,20 @@ impl Accounts {
         }
         self.save(&l)?;
         Ok(acc)
+    }
+
+    pub fn add_elyby(&self, session: &Session, token: &crate::ely::Token) -> McResult<Account> {
+        let mut l = self.list();
+        let id = format!("ely-{}", session.uuid);
+        let acc = Account { id: id.clone(), kind: Kind::Elyby, name: session.name.clone(), uuid: session.uuid.clone(), added_at: now(), last_used: None };
+        if let Some(existing) = l.accounts.iter_mut().find(|a| a.id == id) { existing.name = session.name.clone(); }
+        else { l.accounts.push(acc.clone()); }
+        if l.default.is_none() { l.default = Some(id.clone()); }
+        let mut secrets = self.secrets();
+        secrets.insert(id.clone(), serde_json::to_string(token)?);
+        self.save_secrets(&secrets)?;
+        self.save(&l)?;
+        self.get(&id).ok_or_else(|| McError::NotFound(id))
     }
 
     pub fn add_microsoft(&self, p: &McProfile, refresh_token: &str) -> McResult<Account> {
@@ -164,6 +185,15 @@ impl Accounts {
         let acc = self.get(id).ok_or_else(|| McError::NotFound(format!("cuenta {id}")))?;
         match acc.kind {
             Kind::Offline => Ok(Session::offline(&acc.name)),
+            Kind::Elyby => {
+                let stored = self.secrets().get(id).cloned().ok_or_else(|| McError::Invalid("Vuelve a iniciar sesión con Ely.by.".into()))?;
+                let token: crate::ely::Token = serde_json::from_str(&stored).map_err(|_| McError::Invalid("Vuelve a iniciar sesión con Ely.by.".into()))?;
+                let (session, token) = crate::ely::refresh(&token)?;
+                if session.uuid != acc.uuid { return Err(McError::Invalid("La identidad Ely.by cambió: vuelve a iniciar sesión.".into())); }
+                self.add_elyby(&session, &token)?;
+                self.touch(id);
+                Ok(session)
+            }
             Kind::Microsoft => {
                 let rt = self.secrets().get(id).cloned().ok_or_else(|| McError::Invalid("falta el acceso guardado de esta cuenta: vuelve a iniciar sesion".into()))?;
                 let t = msa::refresh(client_id, &rt)?;
@@ -205,6 +235,27 @@ mod tests {
         a.remove(&y.id).unwrap();
         assert_eq!(a.default_account().unwrap().id, x.id);
         let _ = std::fs::remove_dir_all(d.root());
+    }
+
+    #[test]
+    fn elyby_tokens_are_private_and_removed_with_account() {
+        let d = tmp("ely"); let a = Accounts::new(&d);
+        let session = Session { name:"Alex".into(), uuid:"069a79f444e94726a5befca90e38aaf5".into(), access_token:"TEST-ELY-TOKEN".into(), user_type:"mojang".into(), xuid:None, client_id:None };
+        let token = crate::ely::Token { access_token:session.access_token.clone(), client_token:"TEST-CLIENT".into() };
+        let account = a.add_elyby(&session, &token).unwrap();
+        assert_eq!(account.kind, Kind::Elyby);
+        assert_eq!(a.add_elyby(&session, &token).unwrap().id, account.id);
+        assert_eq!(a.list().accounts.len(), 1);
+        let public = std::fs::read_to_string(a.list_path()).unwrap();
+        assert!(!public.contains("TEST-ELY-TOKEN")); assert!(!public.contains("TEST-CLIENT"));
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(a.secrets_path()).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(std::fs::metadata(&a.dir).unwrap().permissions().mode() & 0o777, 0o700);
+        }
+        a.remove(&account.id).unwrap();
+        assert!(a.secrets().is_empty());
+        std::fs::remove_dir_all(d.root()).unwrap();
     }
 
     #[test]

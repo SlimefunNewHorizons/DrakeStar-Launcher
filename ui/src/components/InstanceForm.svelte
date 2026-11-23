@@ -17,6 +17,8 @@
   let tkind = $state<Target['kind']>(untrack(() => draft.target.kind));
   let taddr = $state(untrack(() => (draft.target.kind === 'server' ? draft.target.address : '')));
   let tworld = $state(untrack(() => (draft.target.kind === 'world' ? draft.target.name : '')));
+  let llan = $state(untrack(() => (draft.target.kind === 'local' ? draft.target.lan : false)));
+  let lport = $state(untrack(() => (draft.target.kind === 'local' ? draft.target.port : 25570)));
   let jvm = $state(untrack(() => draft.extra_jvm.join(' ')));
   let error = $state('');
   let saving = $state(false);
@@ -31,7 +33,7 @@
   async function save(e: Event) {
     e.preventDefault();
     const name = draft.name.trim();
-    const target: Target = draft.target.kind === 'local' ? draft.target : tkind === 'server' ? { kind: 'server', address: taddr.trim() } : tkind === 'world' ? { kind: 'world', name: tworld.trim() } : { kind: 'menu' };
+    const target: Target = tkind === 'local' ? { kind: 'local', port: Math.trunc(Number(lport)) || 25570, lan: llan } : tkind === 'server' ? { kind: 'server', address: taddr.trim() } : tkind === 'world' ? { kind: 'world', name: tworld.trim() } : { kind: 'menu' };
     const inst: Instance = {
       ...$state.snapshot(draft), id: draft.id || slug(name), name, target, mc: draft.mc.trim(),
       performance: fabric && draft.performance, fused: fabric && draft.fused, extra_jvm: jvm.split(/\s+/).filter(Boolean),
@@ -71,6 +73,16 @@
       </div>
     </div>
 
+    {#if tkind === 'local'}
+    <div class="field"><span>{t('f.local_net')}</span>
+      <div class="seg">
+        <button type="button" class:on={!llan} onclick={() => (llan = false)}>{t('f.local_only')}</button>
+        <button type="button" class:on={llan} onclick={() => (llan = true)}>{t('f.local_lan')}</button>
+      </div>
+      <span class="small muted">{llan ? t('f.local_lan_hint') : t('f.local_only_hint')}</span>
+    </div>
+    <label class="field"><span>{t('f.local_port')}</span><input type="number" bind:value={lport} min="1024" max="65535" required /></label>
+    {:else}
     <div class="field"><span>{t('f.target')}</span>
       <div class="seg">
         <button type="button" class:on={tkind === 'menu'} onclick={() => (tkind = 'menu')}>{t('f.t_menu')}</button>
@@ -82,6 +94,7 @@
       <label class="field"><span>{t('f.address')}</span><input type="text" bind:value={taddr} placeholder="mc.drakescraft.cl:25565" required spellcheck="false" /></label>
     {:else if tkind === 'world'}
       <label class="field"><span>{t('f.world')}</span><input type="text" bind:value={tworld} required /></label>
+    {/if}
     {/if}
 
     <label class="switch">

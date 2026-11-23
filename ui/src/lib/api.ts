@@ -1,6 +1,6 @@
 // Capa de acceso al backend. Dentro de la app usa Tauri; en el navegador (npm run dev) usa datos de ejemplo
 // para poder revisar la interfaz sin compilar Rust.
-import type { ImportPreview, MemoryProfile, Account, AccountList, AppInfo, DeviceCode, GameState, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
+import type { CatalogEntry, CatalogHit, ContentKind, ImportPreview, MemoryProfile, Account, AccountList, AppInfo, DeviceCode, GameState, Instance, MsaEvent, Progress, ReportInfo, Settings } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -27,10 +27,14 @@ async function call<T>(cmd: string, args: Record<string, unknown> = {}): Promise
 }
 
 export const api = {
+  catalogSearch: (instance: string, kind: ContentKind, query: string) => call<CatalogHit[]>('catalog_search', { instance, kind, query }),
+  catalogList: (instance: string) => call<CatalogEntry[]>('catalog_list', { instance }),
+  catalogChange: (instance: string, kind: ContentKind, project: string, remove: boolean) => call<CatalogEntry[]>('catalog_change', { instance, kind, project, remove }),
   appInfo: () => call<AppInfo>('app_info'),
   settingsGet: () => call<Settings>('settings_get'),
   settingsSet: (settings: Settings) => call<Settings>('settings_set', { settings }),
   accounts: () => call<AccountList>('accounts_list'),
+  addElyby: (username: string, password: string, totp: string) => call<Account>('account_add_elyby', { username, password, totp }),
   addOffline: (name: string) => call<Account>('account_add_offline', { name }),
   removeAccount: (id: string) => call<void>('account_remove', { id }),
   setDefaultAccount: (id: string) => call<void>('account_set_default', { id }),
@@ -85,10 +89,14 @@ const mockState = {
 async function mock<T>(cmd: string, a: Record<string, any>): Promise<T> {
   const ok = (v: unknown) => Promise.resolve(v as T);
   switch (cmd) {
+    case 'catalog_list': return ok([]);
+    case 'catalog_search':
+    case 'catalog_change': throw new Error('El catálogo requiere la aplicación de escritorio.');
     case 'app_info': return ok({ version: '0.6.0', data_dir: 'C:\\Users\\demo\\AppData\\Roaming\\net.drakes.drakestar', os: 'windows', arch: 'x86_64', min_mc: '1.20', max_mc: '26.2', client_id_temporary: true });
     case 'settings_get': return ok(mockState.settings);
     case 'settings_set': mockState.settings = a.settings; return ok(a.settings);
     case 'accounts_list': return ok(mockState.accounts);
+    case 'account_add_elyby': throw new Error('Ely.by requiere la aplicación de escritorio.');
     case 'account_add_offline': { const acc = { id: 'offline-' + a.name, kind: 'offline', name: a.name, uuid: 'x', added_at: 3 } as Account; mockState.accounts.accounts.push(acc); return ok(acc); }
     case 'account_remove': mockState.accounts.accounts = mockState.accounts.accounts.filter((x) => x.id !== a.id); return ok(undefined);
     case 'account_set_default': mockState.accounts.default = a.id; return ok(undefined);

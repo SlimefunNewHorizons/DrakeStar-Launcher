@@ -6,7 +6,7 @@ use crate::{Dirs, McError, McResult};
 use md5::{Digest, Md5};
 use std::io::Read;
 use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 const PURPUR: &str = "https://api.purpurmc.org/v2/purpur";
@@ -83,13 +83,24 @@ pub fn is_monolith(mc: &str) -> bool {
 pub fn ensure_drakespurpur(d: &Dirs, inst_id: &str, sink: &dyn ProgressSink) -> McResult<PathBuf> {
     let sdir = dir(d, inst_id);
     std::fs::create_dir_all(&sdir)?;
-    let rel: GhRel = ureq::get("https://api.github.com/repos/SlimefunNewHorizons/DrakesPurpur/releases/latest")
+    let mut req = ureq::get("https://api.github.com/repos/SlimefunNewHorizons/DrakesPurpur/releases/latest")
         .set("User-Agent", "SlimefunNewHorizons/DrakeStar-Launcher")
-        .timeout(Duration::from_secs(30))
-        .call()
-        .map_err(|e| McError::Net(format!("DrakesPurpur: {e}")))?
-        .into_json()
-        .map_err(|e| McError::Json(e.to_string()))?;
+        .timeout(Duration::from_secs(30));
+    // la API sin token admite 60 consultas/h por IP (403 en CI o detras de un NAT compartido)
+    if let Ok(t) = std::env::var("GITHUB_TOKEN") {
+        req = req.set("Authorization", &format!("Bearer {t}"));
+    }
+    let rel: GhRel = match req.call() {
+        Ok(r) => r.into_json().map_err(|e| McError::Json(e.to_string()))?,
+        // sin red o sin cuota: se juega con el jar ya descargado en vez de abortar
+        Err(e) => match cached_jar(&sdir) {
+            Some(j) => {
+                sink.log(&format!("DrakesPurpur: no se pudo comprobar la ultima version ({e}); se usa {}", j.display()));
+                return Ok(j);
+            }
+            None => return Err(McError::Net(format!("DrakesPurpur: {e}"))),
+        },
+    };
     let a = rel.assets.iter().find(|a| a.name.starts_with("purpur-paperclip-") && a.name.ends_with(".jar")).ok_or_else(|| McError::NotFound("el release de DrakesPurpur no trae el jar".into()))?;
     let jar = sdir.join(&a.name);
     if std::fs::metadata(&jar).map(|m| m.len()).unwrap_or(0) != a.size {
@@ -109,6 +120,15 @@ pub fn ensure_drakespurpur(d: &Dirs, inst_id: &str, sink: &dyn ProgressSink) -> 
         }
     }
     Ok(jar)
+}
+
+/// Jar de DrakesPurpur ya descargado en la carpeta del servidor (el mas reciente si hubiera varios).
+fn cached_jar(sdir: &Path) -> Option<PathBuf> {
+    let rd = std::fs::read_dir(sdir).ok()?;
+    rd.flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("purpur-paperclip-") && e.file_name().to_string_lossy().ends_with(".jar"))
+        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
+        .map(|e| e.path())
 }
 
 fn md5_hex(b: &[u8]) -> String {
@@ -186,6 +206,19 @@ mod tests {
     }
 
     #[test]
+    fn cached_jar_solo_toma_el_paperclip() {
+        let t = std::env::temp_dir().join(format!("dsmc-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&t).unwrap();
+        assert_eq!(cached_jar(&t), None);
+        std::fs::write(t.join("server-otro.jar"), b"x").unwrap();
+        std::fs::write(t.join("purpur-paperclip-26.2.build.140-stable.jar.part"), b"x").unwrap();
+        assert_eq!(cached_jar(&t), None);
+        std::fs::write(t.join("purpur-paperclip-26.2.build.140-stable.jar"), b"x").unwrap();
+        assert_eq!(cached_jar(&t), Some(t.join("purpur-paperclip-26.2.build.140-stable.jar")));
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
+    #[test]
     fn configure_impone_lo_necesario_y_respeta_el_resto() {
         let t = std::env::temp_dir().join(format!("dsmc-srv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&t);
@@ -196,6 +229,10 @@ mod tests {
         let p = std::fs::read_to_string(dir(&d, "x").join("server.properties")).unwrap();
         assert!(p.contains("view-distance=16") && p.contains("online-mode=false") && p.contains("server-port=25599") && p.contains("server-ip=127.0.0.1"));
         assert_eq!(std::fs::read_to_string(dir(&d, "x").join("eula.txt")).unwrap(), "eula=true\n");
+        // Cambiar el selector a LAN reescribe server-ip vacío (todas las interfaces).
+        configure(&d, "x", 25599, true).unwrap();
+        let p = std::fs::read_to_string(dir(&d, "x").join("server.properties")).unwrap();
+        assert!(p.lines().any(|l| l == "server-ip=") && !p.contains("127.0.0.1"));
         let _ = std::fs::remove_dir_all(&t);
     }
 

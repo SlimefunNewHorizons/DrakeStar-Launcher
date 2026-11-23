@@ -1,0 +1,48 @@
+name: Local play E2E
+
+# Prueba real del boton JUGAR en la instancia `local` (preset «Slimefun en solitario / LAN»): servidor DrakesPurpur 26.2
+# + cliente Fabric 26.2 bajo Xvfb/llvmpipe en un runner efimero. Exito = el servidor anuncia que DrakeTest entro;
+# la captura y los logs quedan como artefacto.
+on:
+  workflow_dispatch:
+    inputs:
+      lan: { description: 'Abrir a la LAN (0|1)', required: false, default: '1' }
+      performance: { description: 'Mods de rendimiento (0|1)', required: false, default: '1' }
+  pull_request:
+    paths: ['.github/workflows/local-play-e2e.yml', 'crates/drakestar-mc/examples/local_play_e2e.rs', 'crates/drakestar-mc/src/play.rs', 'crates/drakestar-mc/src/server.rs']
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Xvfb, Mesa y captura
+        run: |
+          for i in 1 2 3; do sudo apt-get update && break || sleep 5; done
+          sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 libglx-mesa0 mesa-utils imagemagick x11-utils
+      - run: cargo build -p drakestar-mc --example local_play_e2e
+      - name: JUGAR (servidor local + cliente 26.2)
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GITHUB_TOKEN: ${{ github.token }}
+          LAN: ${{ inputs.lan || '1' }}
+          PERF: ${{ inputs.performance || '1' }}
+        run: |
+          Xvfb :77 -screen 0 1280x720x24 & sleep 2
+          export DISPLAY=:77
+          glxinfo -B | grep -E 'renderer|version' || true
+          target/debug/examples/local_play_e2e "$HOME/.drakestar-e2e" "$LAN" 4096 "$PERF" 1200 "$PWD/jugar-local.png"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-play-e2e
+          path: |
+            jugar-local.png
+            ~/.drakestar-e2e/**/logs/*.log
+            ~/.drakestar-e2e/**/server.properties
+          if-no-files-found: warn
