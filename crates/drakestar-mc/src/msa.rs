@@ -217,6 +217,6 @@ mod tests {
 
     #[test]
     fn hyphens_formats_ids() {
-        assert_eq!(hyphens("00112233445566778899aabbccddeeff"), "069a79f4-44e9-4726-a5be-fca90e38aaf5");
+        assert_eq!(hyphens("00112233445566778899aabbccddeeff"), "00112233-4455-6677-8899-aabbccddeeff");
     }
 }
