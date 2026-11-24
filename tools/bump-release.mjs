@@ -88,11 +88,13 @@ const bumpKeyAll = (text) => text.replace(/("version"\s*:\s*")[^"]*(")/g, `$1${v
 // Cargo.lock: solo los paquetes del workspace (los externos no se tocan)
 const bumpLock = (text) =>
   text.replace(/(name = "drakestar[^"]*"\r?\nversion = ")[^"]*(")/g, `$1${version}$2`);
-// package-lock.json: la raiz y la entrada "" (las dependencias tienen su propia version)
+// package-lock.json: la raiz y la entrada "" (las dependencias tienen su propia
+// version). El patron de "" va anclado al name para no comerse nada: npm es
+// quisquilloso con un lock corrupto (`npm ci`: EUSAGE).
 const bumpLockJson = (text) =>
   text
     .replace(/("version"\s*:\s*")[^"]*(")/, `$1${version}$2`)
-    .replace(/(""\s*:\s*\{[^}]*?"version"\s*:\s*")[^"]*(")/s, `$1${version}$2`);
+    .replace(/("":\s*\{\s*"name":\s*"drakestar-ui",\s*"version":\s*")[\d.]+(")/, `$1${version}$2`);
 
 console.log(`\n== DrakeStar ${version} (etiqueta ${tag})`);
 console.log(dryRun ? '== modo dry-run: no se escribe nada\n' : '');

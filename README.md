@@ -1,9 +1,3 @@
-<!-- credits:start -->
-> **Credits & license.** Port and maintenance by [JackStar6677-1](https://github.com/JackStar6677-1) and [DrakesCraft Labs](https://github.com/SlimefunNewHorizons). Original authors: [DrgX89](https://github.com/DrgX89). Upstream license: **MIT License** (see [LICENSE](LICENSE)). Details: [docs/UPSTREAM_ATTRIBUTION.md](docs/UPSTREAM_ATTRIBUTION.md) · Policy: [Rights & Attribution](https://github.com/SlimefunNewHorizons/.github/blob/main/RIGHTS_AND_ATTRIBUTION.md). Independent community project, not affiliated with or endorsed by the original authors or the official Slimefun team.
->
-> **Créditos y licencia.** Port y mantenimiento por [JackStar6677-1](https://github.com/JackStar6677-1) y [DrakesCraft Labs](https://github.com/SlimefunNewHorizons). Autores originales: [DrgX89](https://github.com/DrgX89). Licencia original: **MIT License**. Detalle en [docs/UPSTREAM_ATTRIBUTION.md](docs/UPSTREAM_ATTRIBUTION.md).
-<!-- credits:end -->
-
 # DrakeStar (`v0.7.0` — Feature-Complete)
 
 > **Status:** `Feature-Complete / Production Freeze (v0.7.0)` — Stable production launcher with automated signed CI/CD releases (`--locked` + minisign).
