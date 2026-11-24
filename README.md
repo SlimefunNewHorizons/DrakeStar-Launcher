@@ -23,8 +23,17 @@ DrakeStar **updates itself** (signed releases): it checks on start and from *Set
 1. **Accounts**: sign in with Microsoft (your browser opens by itself; type the code only if asked) or add an offline account. Keep as many of each as you want and pick which one to play with.
 2. **Pick what to play**: *DrakesCraft (online)*, *Slimefun single-player / LAN* (in 26.2 + Java 25 with **DrakeStar Fused** `v1.0.0-alpha.4+`, embeds the **DrakesPurpur 26.2** monolith with Slimefun + 9 StarSuites + Rust FFM/JNI directly inside the Fabric client JVM and joins it without a second server process; ~6 GB free RAM, falling back to the managed local server if Fused is disabled), *Vanilla* or your own instance (version, Fabric or vanilla, memory, performance mods).
 3. **PLAY**. The first time it downloads Java and the game files; afterwards it opens in seconds.
+4. **Native engine** (*Native engine*, next to PLAY): the Rust engine — Horizon for Minecraft 26.3. It installs Horizon's own binaries (from Windows x64/arm64, Linux and macOS), prepares them with a managed JDK on first run, and joins your server with the Microsoft account if you pick one.
 
 Fabric instances also get Fabric API and, if enabled, the performance mods (Sodium, Lithium, FerriteCore, ImmediatelyFast, Entity Culling) and **DrakeStar Fused** (alpha: one `.jar` for 1.20 to 26.2).
+
+**Releasing**: never build by hand. `Cargo.toml`, `src-tauri/tauri.conf.json` and `ui/package.json` carry the same version; push the `vX.Y.Z` tag and GitHub Actions builds, signs and publishes on Windows/Ubuntu/macOS:
+
+```bash
+node tools/bump-release.mjs 0.7.2     # or: npm run bump-release -- 0.7.2
+```
+
+Details (forks, PRs, manual dispatch): [docs/PUBLICAR.md](docs/PUBLICAR.md#publicar-una-versión-con-el-ci-no-compiles-a-mano).
 
 ## Logs and privacy
 

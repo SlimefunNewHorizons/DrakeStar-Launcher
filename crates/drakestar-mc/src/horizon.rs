@@ -12,9 +12,15 @@
 //!   como no validado para online-mode.
 //! - `horizon-prepare` corre los exporters de Mojang: pide un **JDK** (con
 //!   `javac`), no el JRE con el que jugamos.
-//! - Horizon no tiene opción de título de ventana: se renombra por fuera con
-//!   wmctrl (X11). Por eso el plan fuerza el backend X11; en Wayland puro el
-//!   título se queda como está.
+//! - El empaquetado depende de la plataforma: Linux publica `.tar.gz`
+//!   (`horizon-linux-x86_64.tar.gz`) y Windows/macOS publican `.zip`
+//!   (`horizon-windows-x64.zip`, `horizon-windows-arm64.zip`,
+//!   `horizon-macos-arm64.zip`). Los tres se extraen con las mismas librerías
+//!   Rust (`tar`/`flate2`/`zip`), sin depender de que haya un `tar` externo
+//!   (en Windows no se puede asumir).
+//! - Horizon no tiene opción de título de ventana: en Linux se renombra por
+//!   fuera con wmctrl (X11) y por eso el plan fuerza el backend X11; en Wayland
+//!   puro, y en Windows/macOS, el título se queda como está.
 
 use crate::error::{McError, McResult};
 use crate::version::VersionJson;
@@ -54,6 +60,10 @@ pub struct Hz {
     pub shared: PathBuf,
     /// Saves/opciones/logs del jugador en esta instancia.
     pub home: PathBuf,
+    /// Carpeta de juego: `saves/`, `options.txt`, `horizon-mods/` y los mods.
+    /// El motor la usa como `--game-dir`; sin ella los usaría del directorio
+    /// desde donde se lanza.
+    pub game: PathBuf,
 }
 
 /// Solo la parte compartida (para instalar sin elegir instancia).
@@ -62,9 +72,11 @@ pub fn shared_dir(d: &Dirs) -> PathBuf {
 }
 
 pub fn paths(d: &Dirs, id: &str) -> Hz {
+    let instance = d.instance(id);
     Hz {
         shared: shared_dir(d),
-        home: d.instance(id).join("horizon-home"),
+        home: instance.join("horizon-home"),
+        game: instance,
     }
 }
 
@@ -92,16 +104,33 @@ impl Hz {
 
 // ---------- descarga ----------
 
-/// URL del paquete de binarios por plataforma.
+/// URL del paquete de binarios por plataforma (el `nightly` de Horizon, que
+/// publica para Linux en `.tar.gz` y para Windows/macOS en `.zip`).
 pub fn package_url() -> McResult<&'static str> {
-    #[cfg(not(windows))]
-    {
-        Ok("https://github.com/horizon-rust/horizon/releases/download/nightly/horizon-linux-x86_64.tar.gz")
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => {
+            Ok("https://github.com/horizon-rust/horizon/releases/download/nightly/horizon-linux-x86_64.tar.gz")
+        }
+        ("windows", "x86_64") => {
+            Ok("https://github.com/horizon-rust/horizon/releases/download/nightly/horizon-windows-x64.zip")
+        }
+        ("windows", "aarch64") => {
+            Ok("https://github.com/horizon-rust/horizon/releases/download/nightly/horizon-windows-arm64.zip")
+        }
+        ("macos", "aarch64") => {
+            Ok("https://github.com/horizon-rust/horizon/releases/download/nightly/horizon-macos-arm64.zip")
+        }
+        _ => Err(McError::NotFound(format!(
+            "Horizon no publica paquete para {}/{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ))),
     }
-    #[cfg(windows)]
-    {
-        Err(McError::NotFound("Horizon para Windows: sin release fijado todavia".into()))
-    }
+}
+
+/// Nombre del archivo del paquete (el que aparece en su `SHA256SUMS`).
+pub fn package_name(url: &str) -> &str {
+    url.rsplit_once('/').map(|(_, n)| n).unwrap_or("horizon-package")
 }
 
 /// El nightly se sobrescribe en cada publicacion: el hash no se puede fijar
@@ -133,39 +162,124 @@ pub fn sha_in_sums(sums: &str, name: &str) -> Option<String> {
 /// binarios trae `research-lock.json`, que `horizon-prepare` necesita junto
 /// al programa (o vía `--root`, que es lo que le pasamos al preparar).
 /// Exige SHA-256 valido (el que publica el nightly): sin hash no se instala.
+///
+/// La extracción es en proceso (crates `tar`/`flate2`/`zip`), no con un `tar`
+/// externo: en Windows el paquete es un `.zip` y no se puede asumir que exista
+/// la herramienta. Los tres formatos se tratan igual: el archivo trae una
+/// carpeta con el nombre de la plataforma y se extrae su contenido en la raíz
+/// de `pkg/` (lo que `--root` después le pasa a preparar).
 pub fn install(hz: &Hz) -> McResult<()> {
     let url = package_url()?;
+    let name = package_name(url);
     let sha = nightly_sha256(url)?;
     std::fs::create_dir_all(&hz.shared)?;
-    let tmp = hz.shared.join("horizon.tar.gz");
+    let tmp = hz.shared.join(name);
     let _ = std::fs::remove_file(&tmp); // si quedo uno a medias de un intento fallido
-    let n = download_verified(url, &tmp, &sha, None, |_| {})?;
+    let _n = download_verified(url, &tmp, &sha, None, |_| {})?;
 
-    let pkg = hz.pkg();
-    let _ = std::fs::remove_dir_all(&pkg);
-    std::fs::create_dir_all(&pkg)?;
-    // `--strip-components=1`: el tar trae una carpeta con el nombre de la
-    // plataforma; su contenido (binarios + research-lock.json) queda en la
-    // raíz de `pkg/`, que es lo que `--root` después le pasa a preparar.
-    let st = std::process::Command::new("tar")
-        .arg("xzf")
-        .arg(&tmp)
-        .arg("-C")
-        .arg(&pkg)
-        .arg("--strip-components=1")
-        .status()
-        .map_err(McError::Io)?;
-    if !st.success() {
-        let _ = std::fs::remove_dir_all(&pkg);
+    // se extrae a un lado y se sustituye solo si quedó completo: un intento
+    // fallido no puede dejar el motor a medias
+    let staging = hz.shared.join("pkg.nueva");
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging)?;
+    if let Err(e) = extract_package(&tmp, &staging) {
+        let _ = std::fs::remove_dir_all(&staging);
         let _ = std::fs::remove_file(&tmp);
-        return Err(McError::Io(std::io::Error::other("falló la extracción del paquete de Horizon")));
+        return Err(e);
     }
-    let _ = std::fs::remove_file(&tmp);
-    if !hz.installed() {
-        let _ = std::fs::remove_dir_all(&pkg);
+    make_binaries_executable(&staging)?;
+    let client = staging.join(CLIENT_BIN);
+    let prepare = staging.join(PREPARE_BIN);
+    if !client.is_file() || !prepare.is_file() {
+        let _ = std::fs::remove_dir_all(&staging);
+        let _ = std::fs::remove_file(&tmp);
         return Err(McError::NotFound("el paquete de Horizon no trae los binarios".into()));
     }
-    let _ = n;
+    let _ = std::fs::remove_dir_all(hz.pkg());
+    std::fs::rename(&staging, hz.pkg())?;
+    let _ = std::fs::remove_file(&tmp);
+    Ok(())
+}
+
+/// Ruta dentro del paquete una vez quitada la carpeta de la plataforma. Se
+/// descarta cualquier componente que no sea un nombre simple (`..`, absolutas,
+/// prefijos de Windows): nada puede escapar del destino.
+fn sanitized_rel(p: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    let comps: Vec<_> = p.components().collect();
+    // sin carpeta de plataforma, o con algo que no sea un nombre simple
+    // (`..`, rutas absolutas, prefijos de Windows): se descarta
+    if comps.len() < 2 || comps.iter().any(|c| !matches!(c, Component::Normal(_))) {
+        return None;
+    }
+    let rest: PathBuf = comps[1..].iter().map(|c| c.as_os_str()).collect();
+    Some(rest)
+}
+
+/// Extrae el paquete a `dest` quitando la carpeta raíz (la de la plataforma).
+/// El formato se deduce del nombre: `.zip` (Windows/macOS) o `.tar.gz` (Linux).
+pub fn extract_package(archive: &Path, dest: &Path) -> McResult<()> {
+    let name = archive.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name.ends_with(".zip") {
+        extract_zip(archive, dest)
+    } else if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
+        extract_targz(archive, dest)
+    } else {
+        Err(McError::Invalid(format!("paquete de Horizon con formato desconocido: {name}")))
+    }
+}
+
+fn extract_zip(archive: &Path, out: &Path) -> McResult<()> {
+    let mut z = zip::ZipArchive::new(std::fs::File::open(archive)?)?;
+    for i in 0..z.len() {
+        let mut f = z.by_index(i)?;
+        // `enclosed_name` ya rechaza rutas que se salen del destino
+        let Some(rel) = f.enclosed_name().and_then(|p| sanitized_rel(&p)) else { continue };
+        let dest = out.join(rel);
+        if f.is_dir() {
+            std::fs::create_dir_all(&dest)?;
+        } else {
+            if let Some(p) = dest.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            let mut o = std::fs::File::create(&dest)?;
+            std::io::copy(&mut f, &mut o)?;
+        }
+    }
+    Ok(())
+}
+
+fn extract_targz(archive: &Path, out: &Path) -> McResult<()> {
+    let gz = flate2::read::GzDecoder::new(std::fs::File::open(archive)?);
+    let mut t = tar::Archive::new(gz);
+    t.set_preserve_permissions(true);
+    for entry in t.entries().map_err(|e| McError::Io(std::io::Error::other(e.to_string())))? {
+        let mut e = entry.map_err(|e| McError::Io(std::io::Error::other(e.to_string())))?;
+        let Some(rel) = sanitized_rel(&e.path().map_err(|e| McError::Io(e))?) else { continue };
+        // `unpack` crea directorios, escribe el archivo y (con
+        // `preserve_permissions`) deja el modo tal como viene en el tar
+        e.unpack(out.join(rel)).map_err(|e| McError::Io(e))?;
+    }
+    Ok(())
+}
+
+/// El `.zip` de Windows/macOS no guarda permisos: se marcan ejecutables los
+/// binarios del motor (en Windows no hace falta, es un no-op).
+#[cfg(unix)]
+fn make_binaries_executable(pkg: &Path) -> McResult<()> {
+    use std::os::unix::fs::PermissionsExt;
+    for b in [CLIENT_BIN, PREPARE_BIN] {
+        let p = pkg.join(b);
+        if p.is_file() {
+            let mut perms = std::fs::metadata(&p)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&p, perms)?;
+        }
+    }
+    Ok(())
+}
+#[cfg(not(unix))]
+fn make_binaries_executable(_pkg: &Path) -> McResult<()> {
     Ok(())
 }
 
@@ -315,7 +429,7 @@ pub fn prepare(hz: &Hz, inputs: &Inputs, java_home: &Path) -> McResult<()> {
     let st = std::process::Command::new(hz.prepare())
         .args(&args)
         .output()
-        .map_err(McError::Io)?;
+        .map_err(|e| McError::Io(e))?;
     if !st.status.success() {
         let msg = String::from_utf8_lossy(&st.stderr);
         return Err(McError::Io(std::io::Error::other(format!(
@@ -337,14 +451,21 @@ pub fn launch_plan(hz: &Hz, server: Option<&str>, session: Option<&Path>, render
     let mut args = vec![
         "--resources".to_string(),
         hz.resources().to_string_lossy().into_owned(),
+        // la carpeta de juego (mods, saves, opciones) vive en la instancia,
+        // como en el modo Java; sin `--game-dir` el motor usarÃ­a el directorio
+        // desde el que se lanza
+        "--game-dir".to_string(),
+        hz.game.to_string_lossy().into_owned(),
         "--home".to_string(),
         hz.home.to_string_lossy().into_owned(),
         "--render-distance".to_string(),
         render_distance.clamp(2, 128).to_string(),
     ];
     let mut envs = std::collections::BTreeMap::new();
-    // X11 para que el renombrado de ventana funcione; en Wayland puro el
-    // título se queda como está (no hay forma desde fuera).
+    // X11 para que el renombrado de ventana funcione (Linux); en Wayland puro
+    // el título se queda como está (no hay forma desde fuera). En Windows y
+    // macOS esa variable no existe: el título no se toca.
+    #[cfg(unix)]
     envs.insert("WINIT_UNIX_BACKEND".to_string(), "x11".to_string());
     envs.insert("HORIZON_HOME".to_string(), hz.home.to_string_lossy().into_owned());
     if let Some(s) = server {
@@ -397,6 +518,10 @@ pub fn parse_wmctrl_by_title(out: &str, title: &str) -> Option<String> {
 
 /// Renombra la ventana del juego. Best-effort: si el compositor es Wayland
 /// puro, wmctrl no ve la ventana y se deja el título original.
+///
+/// Solo existe el camino de X11 (wmctrl): en Windows y macOS no hay forma de
+/// renombrar una ventana ajena desde fuera, así que ahí no se hace nada.
+#[cfg(unix)]
 pub fn retitle(pid: u32, title: &str, rounds: usize, interval: Duration) -> bool {
     let mut renamed = false;
     for _ in 0..rounds.max(1) {
@@ -415,12 +540,31 @@ pub fn retitle(pid: u32, title: &str, rounds: usize, interval: Duration) -> bool
     renamed
 }
 
+/// En Windows y macOS no hay wmctrl: el título se queda como está.
+#[cfg(not(unix))]
+pub fn retitle(_pid: u32, _title: &str, _rounds: usize, _interval: Duration) -> bool {
+    false
+}
+
+/// Renombra la ventana en cuanto aparece, sin bloquear el arranque
+/// (best-effort; en Windows/macOS no hace nada).
+pub fn spawn_retitle(pid: u32) {
+    let _ = pid;
+    #[cfg(unix)]
+    {
+        let title = WINDOW_TITLE.to_string();
+        std::thread::spawn(move || {
+            retitle(pid, &title, 40, Duration::from_millis(250));
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn hz() -> Hz {
-        Hz { shared: PathBuf::from("/data/horizon"), home: PathBuf::from("/data/instances/x/horizon-home") }
+        Hz { shared: PathBuf::from("/data/horizon"), home: PathBuf::from("/data/instances/x/horizon-home"), game: PathBuf::from("/data/instances/x") }
     }
     fn inputs() -> Inputs {
         Inputs {
@@ -435,7 +579,9 @@ mod tests {
     #[test]
     fn prepare_usa_archivos_nombrados_y_complete() {
         let a = prepare_args(&hz(), &inputs(), Path::new("/opt/jdk25"));
-        let j = a.join(" ");
+        // en Windows las rutas construidas llevan `\`: se normaliza para que la
+        // prueba valga igual en todos los sistemas
+        let j = a.join(" ").replace('\\', "/");
         assert!(j.contains("--prepare --complete"), "debe ser idempotente y completo: {j}");
         for f in [
             "--root /data/horizon/pkg",
@@ -454,12 +600,16 @@ mod tests {
     #[test]
     fn plan_singleplayer_sin_servidor() {
         let p = launch_plan(&hz(), None, None, DEFAULT_RENDER_DISTANCE);
-        let j = p.args.join(" ");
+        let j = p.args.join(" ").replace('\\', "/");
         assert!(j.contains(&format!("--resources /data/horizon/resources/{MC_NATIVE}")));
         assert!(j.contains("--render-distance 8"));
         assert!(!j.contains("--server"));
         assert!(!j.contains("--session-file"));
-        assert_eq!(p.envs.get("WINIT_UNIX_BACKEND").map(String::as_str), Some("x11"), "fuerza X11 para poder renombrar la ventana");
+        // X11 solo en Linux: es para poder renombrar la ventana con wmctrl
+        #[cfg(unix)]
+        assert_eq!(p.envs.get("WINIT_UNIX_BACKEND").map(String::as_str), Some("x11"));
+        #[cfg(not(unix))]
+        assert!(!p.envs.contains_key("WINIT_UNIX_BACKEND"));
         assert_eq!(p.envs.get("HORIZON_HOME").map(String::as_str), Some(hz().home.to_string_lossy().as_ref()));
     }
 
@@ -505,7 +655,7 @@ mod tests {
             r#"{"minecraft":{"version":"26.3","manifest_sha1":"11f1aaa","accepted_manifest_sha1":["969fbbb","4fe1ccc"],"client_sha1":"e877","server_sha1":"3368","java_major":25}}"#,
         )
         .unwrap();
-        let hz = Hz { shared: dir.clone(), home: dir.join("home") };
+        let hz = Hz { shared: dir.clone(), home: dir.join("home"), game: dir.join("game") };
         let lock = read_lock(&hz).unwrap();
         assert_eq!(lock.java_major, 25);
         assert_eq!(lock.manifest_sha1.as_deref(), Some("11f1aaa"));
@@ -530,7 +680,7 @@ mod tests {
             format!(r#"{{"minecraft":{{"accepted_manifest_sha1":["{h}"]}}}}"#),
         )
         .unwrap();
-        let hz = Hz { shared: dir.clone(), home: dir.join("home") };
+        let hz = Hz { shared: dir.clone(), home: dir.join("home"), game: dir.join("game") };
         // está en la lista: no hace falta red y no toca el archivo
         assert!(ensure_pinned_manifest(&hz, &d, "26.3", &crate::NullSink).is_ok());
         assert_eq!(std::fs::read(&json).unwrap(), br#"{"id":"26.3"}"#);
@@ -544,5 +694,116 @@ mod tests {
         assert_eq!(sha_in_sums(sums, "horizon-linux-x86_64.tar.gz").as_deref(), Some("83d36c5a2f8b6690d4d77411dfc3f85753319184fffe738ee5f0a4c552a0eabe"));
         assert_eq!(sha_in_sums(sums, "no-existe.tar.gz"), None);
         assert_eq!(sha_in_sums("basura", "horizon-linux-x86_64.tar.gz"), None);
+    }
+
+    /// El paquete se resuelve por plataforma: Windows tiene release publicado
+    /// (x64 y arm64), Linux su `.tar.gz` y macOS arm64 su `.zip`.
+    #[test]
+    fn url_del_paquete_es_la_de_la_plataforma() {
+        let url = package_url().expect("esta plataforma tiene paquete de Horizon");
+        assert!(url.starts_with("https://github.com/horizon-rust/horizon/releases/download/nightly/"), "{url}");
+        let name = package_name(url);
+        let (os, arch) = (std::env::consts::OS, std::env::consts::ARCH);
+        let esperado = match (os, arch) {
+            ("linux", "x86_64") => "horizon-linux-x86_64.tar.gz",
+            ("windows", "x86_64") => "horizon-windows-x64.zip",
+            ("windows", "aarch64") => "horizon-windows-arm64.zip",
+            ("macos", "aarch64") => "horizon-macos-arm64.zip",
+            _ => return, // sin paquete publicado: no hay nada que comparar
+        };
+        assert_eq!(name, esperado, "URL inesperada para {os}/{arch}");
+    }
+
+    fn zip_de_prueba(path: &Path) {
+        use std::io::Write;
+        let f = std::fs::File::create(path).unwrap();
+        let mut z = zip::ZipWriter::new(f);
+        let opts: zip::write::SimpleFileOptions = Default::default();
+        z.start_file("horizon-windows-x64/", opts).unwrap(); // entrada de directorio
+        z.start_file(format!("horizon-windows-x64/{CLIENT_BIN}"), opts).unwrap();
+        z.write_all(b"cliente").unwrap();
+        z.start_file("horizon-windows-x64/research-lock.json", opts).unwrap();
+        z.write_all(b"{}").unwrap();
+        z.start_file("horizon-windows-x64/nested/data.bin", opts).unwrap();
+        z.write_all(b"datos").unwrap();
+        z.start_file("../../escapado.txt", opts).unwrap(); // no puede salir del destino
+        z.write_all(b"fuera").unwrap();
+        z.finish().unwrap();
+    }
+
+    fn targz_de_prueba(path: &Path) {
+        use std::io::Write;
+        let f = std::fs::File::create(path).unwrap();
+        let enc = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+        let mut b = tar::Builder::new(enc);
+        for (n, c) in [(CLIENT_BIN, b"cliente" as &[u8]), (PREPARE_BIN, b"preparar")] {
+            let mut h = tar::Header::new_gnu();
+            h.set_size(c.len() as u64);
+            h.set_mode(0o755);
+            h.set_cksum();
+            b.append_data(&mut h, format!("horizon-linux-x86_64/{n}"), c).unwrap();
+        }
+        let mut enc = b.into_inner().unwrap();
+        enc.flush().unwrap();
+        enc.finish().unwrap();
+    }
+
+    /// Los dos formatos que publica Horizon (`.zip` de Windows/macOS y
+    /// `.tar.gz` de Linux) se extraen igual: sin la carpeta de la plataforma.
+    /// La entrada con `..` del `.zip` (que sí se puede escribir) se descarta:
+    /// nada puede salir del destino (el `..` del tar lo cubre la prueba de
+    /// `sanitized_rel`).
+    #[test]
+    fn extrae_zip_y_targz_sin_la_carpeta_de_plataforma() {
+        let dir = std::env::temp_dir().join(format!("hz-ext-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let zpath = dir.join("horizon-windows-x64.zip");
+        zip_de_prueba(&zpath);
+        let zout = dir.join("zip-out");
+        std::fs::create_dir_all(&zout).unwrap();
+        extract_package(&zpath, &zout).unwrap();
+        assert_eq!(std::fs::read(zout.join(CLIENT_BIN)).unwrap(), b"cliente");
+        assert_eq!(std::fs::read(zout.join("nested/data.bin")).unwrap(), b"datos");
+        assert!(zout.join("research-lock.json").is_file());
+        assert!(!zout.join("escapado.txt").exists() && !dir.join("escapado.txt").exists());
+
+        let tpath = dir.join("horizon-linux-x86_64.tar.gz");
+        targz_de_prueba(&tpath);
+        let tout = dir.join("tar-out");
+        std::fs::create_dir_all(&tout).unwrap();
+        extract_package(&tpath, &tout).unwrap();
+        assert_eq!(std::fs::read(tout.join(CLIENT_BIN)).unwrap(), b"cliente");
+        assert_eq!(std::fs::read(tout.join(PREPARE_BIN)).unwrap(), b"preparar");
+        assert!(!tout.join("escapado.txt").exists() && !dir.join("escapado.txt").exists());
+
+        // del zip no salen permisos: los binarios se marcan ejecutables
+        make_binaries_executable(&zout).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(zout.join(CLIENT_BIN)).unwrap().permissions().mode();
+            assert!(mode & 0o111 != 0, "el cliente tiene que quedar ejecutable: {mode:o}");
+        }
+
+        // un formato que no es el de Horizon se rechaza, no se inventa
+        let raro = dir.join("paquete.rar");
+        std::fs::write(&raro, b"").unwrap();
+        assert!(extract_package(&raro, &dir.join("otro")).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// La ruta dentro del paquete se sanea: nada de `..`, ni rutas absolutas.
+    #[test]
+    fn sanitized_rel_quita_la_carpeta_raiz_y_rechaza_escapadas() {
+        assert_eq!(sanitized_rel(Path::new("horizon-windows-x64/horizon-client.exe")), Some(PathBuf::from("horizon-client.exe")));
+        assert_eq!(sanitized_rel(Path::new("horizon-linux-x86_64/nested/data.bin")), Some(PathBuf::from("nested/data.bin")));
+        assert_eq!(sanitized_rel(Path::new("horizon-linux-x86_64/")), None);
+        assert_eq!(sanitized_rel(Path::new("../escapado")), None);
+        assert_eq!(sanitized_rel(Path::new("horizon-linux-x86_64/../escapado")), None);
+        assert_eq!(sanitized_rel(Path::new("/etc/passwd")), None);
+        assert_eq!(sanitized_rel(Path::new("")), None);
     }
 }

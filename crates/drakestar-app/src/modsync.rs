@@ -1,7 +1,7 @@
 //! Sincronizacion diferencial (Delta-Sync) de mods Servidor <-> Cliente y
 //! analizador pre-arranque de conflictos Fabric / Mixin en Rust.
 //!
-//! Cumple el flujo disenado para Project Purple (JackStar + Nix):
+//! Cumple el flujo disenado para Project Purple (el equipo de DrakeStar):
 //! 1. Al pulsar Play, el launcher compara los hashes SHA-256 de `mods/` contra el
 //!    manifiesto del servidor: descarga SOLO los `.jar` nuevos o editados y
 //!    elimina los `.jar` retirados del servidor sin re-descargar todo el modpack.

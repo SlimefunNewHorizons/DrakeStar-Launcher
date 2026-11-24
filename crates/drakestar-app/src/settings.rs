@@ -56,7 +56,7 @@ mod tests {
             active_profile: Some("a".into()),
             session_uuid: Some("11111111-2222-3333-4444-555555555555".into()),
             session_token: Some("mc_token_123".into()),
-            session_name: Some("JackStar".into()),
+            session_name: Some("Jugador".into()),
         };
         s.save(&l).unwrap();
         assert_eq!(Settings::load(&l), s);

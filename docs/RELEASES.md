@@ -12,4 +12,4 @@
 
 **Visibilidad en la UI:** cada perfil muestra su pastilla de canal (`assets/brand/ui/status-channel-*.svg`); cambiar de canal exige confirmación.
 
-**Pendiente:** firma del manifiesto, rollback automático, publicación por CI.
+**Pendiente:** firma del manifiesto, rollback automático. (La **publicación por CI** ya existe: workflow `release.yml` que compila, firma y sube `latest.json` — ver [PUBLICAR.md](PUBLICAR.md#publicar-una-versión-con-el-ci-no-compiles-a-mano).)

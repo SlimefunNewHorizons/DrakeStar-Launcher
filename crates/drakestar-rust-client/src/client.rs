@@ -14,7 +14,7 @@
 
 use crate::proto;
 use serde_json::Value;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -238,22 +238,17 @@ pub fn run(cfg: &Config, out: &mut dyn FnMut(&str)) -> Result<(), Error> {
     // No se manda un paquete de desconexion porque tras el cifrado habria que
     // cifrarlo tambien, y eso significaria compartir el estado del túnel con este
     // hilo; el servidor interpreta el cierre igual.
-    // En tests unitarios no se lee stdin del runner para no bloquear el proceso.
-    #[cfg(not(test))]
-    {
-        use std::io::BufRead;
-        let quit = tcp.try_clone()?;
-        std::thread::spawn(move || {
-            let stdin = std::io::stdin();
-            for line in stdin.lock().lines().map_while(Result::ok) {
-                let cmd = line.trim();
-                if cmd == "quit" || cmd == "stop" || cmd == "exit" {
-                    let _ = quit.shutdown(std::net::Shutdown::Both);
-                    return;
-                }
+    let quit = tcp.try_clone()?;
+    std::thread::spawn(move || {
+        let stdin = std::io::stdin();
+        for line in stdin.lock().lines().map_while(Result::ok) {
+            let cmd = line.trim();
+            if cmd == "quit" || cmd == "stop" || cmd == "exit" {
+                let _ = quit.shutdown(std::net::Shutdown::Both);
+                return;
             }
-        });
-    }
+        }
+    });
 
     // flujo posterior (configuracion/play): decodifica lo esencial (KeepAlive, Acknowledged)
     // para mantener la conexion viva de forma indefinida y no ser expulsado por timeout.
@@ -405,7 +400,14 @@ mod tests {
 
     #[test]
     fn online_mode_and_compression_are_reported() {
-        let (_, res) = collect(&cfg(0), |_r, w| {
+        // el servidor lee el saludo antes de contestar: si cierra sin leerlo,
+        // en Windows el sistema manda un RST y el cliente ve abortada la
+        // conexion antes de poder procesar el paquete (en Linux solo se descarta)
+        let (_, res) = collect(&cfg(0), |r, w| {
+            let (hs, _) = proto::read_packet(r).unwrap(); // handshake
+            assert_eq!(hs, 0x00);
+            let (start, _) = proto::read_packet(r).unwrap(); // login start
+            assert_eq!(start, LOGIN_START);
             proto::send_packet(w, PKT_ENCRYPTION_REQUEST, b"x").unwrap();
             w.flush().unwrap();
         });
@@ -445,7 +447,13 @@ mod tests {
 
     #[test]
     fn disconnect_reason_is_extracted_from_chat_json() {
-        let (lines, res) = collect(&cfg(0), |_r, w| {
+        // el saludo se lee antes de cerrar (ver `online_mode_...`: si no, en
+        // Windows el RST llega antes que el paquete de desconexion)
+        let (lines, res) = collect(&cfg(0), |r, w| {
+            let (hs, _) = proto::read_packet(r).unwrap(); // handshake
+            assert_eq!(hs, 0x00);
+            let (start, _) = proto::read_packet(r).unwrap(); // login start
+            assert_eq!(start, LOGIN_START);
             let mut b = Vec::new();
             proto::write_string(&mut b, r#"{"text":"servidor lleno"}"#);
             proto::send_packet(w, PKT_DISCONNECT, &b).unwrap();

@@ -24,7 +24,7 @@ mod tests {
 
     #[test]
     fn names() {
-        assert!(valid_name("JackStar6677"));
+        assert!(valid_name("Jugador123"));
         assert!(!valid_name("ab"));
         assert!(!valid_name("nombre con espacio"));
         assert!(!valid_name("nombremuuuuuuylargo1"));
@@ -34,7 +34,7 @@ mod tests {
     fn offline_uuid_matches_vanilla_servers() {
         // valor conocido de un servidor offline-mode para "Notch" (UUID v3)
         assert_eq!(offline_uuid("Notch"), "b50ad385-829d-3141-a216-7e7d7539ba7f");
-        let u = offline_uuid("JackStar6677");
+        let u = offline_uuid("Jugador123");
         assert_eq!(u.len(), 36);
         assert_eq!(&u[14..15], "3");
     }

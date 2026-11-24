@@ -16,7 +16,10 @@ pub fn component_for(mode: Mode) -> Option<&'static str> {
 }
 
 pub fn platform() -> String {
-    let os = std::env::consts::OS;
+    let os = match std::env::consts::OS {
+        "macos" => "macos",
+        o => o,
+    };
     format!("{os}-{}", std::env::consts::ARCH)
 }
 
@@ -206,27 +209,36 @@ mod tests {
             }
         }
 
-        // el cliente resuelve en Linux desde un perfil nightly (válido solo en Linux;
-        // en Windows no hay binario publicado todavía y resolve debe decir por qué)
+        // el cliente resuelve en Linux desde un perfil nightly: el manifiesto solo
+        // publica linux-x86_64. En Windows/macOS todavía no hay binario: no debe
+        // resolver y tiene que decir por qué (misma prueba, las dos caras).
         let mut p = sample("rust", Mode::DrakesRust);
         p.channel = Channel::Nightly;
         p.minecraft = "26.2".into();
         let res = resolve(Some(&m), &p);
-        let rel = res
-            .resolved
-            .unwrap_or_else(|| panic!("el cliente debería resolver: {}", res.reason.unwrap_or_default()));
-        assert_eq!(rel.version, "0.1");
-        assert!(
-            rel.url.starts_with("https://"),
-            "el binario tiene que venir por https: {}",
-            rel.url
-        );
-        // no debe seguir apuntando al ZIP de Horizon: eso no lo puede ejecutar
-        assert!(
-            !rel.url.contains("horizon"),
-            "el manifest sigue apuntando a Horizon: {}",
-            rel.url
-        );
+        #[cfg(target_os = "linux")]
+        {
+            let rel = res
+                .resolved
+                .unwrap_or_else(|| panic!("el cliente debería resolver: {}", res.reason.unwrap_or_default()));
+            assert_eq!(rel.version, "0.1");
+            assert!(
+                rel.url.starts_with("https://"),
+                "el binario tiene que venir por https: {}",
+                rel.url
+            );
+            // no debe seguir apuntando al ZIP de Horizon: eso no lo puede ejecutar
+            assert!(
+                !rel.url.contains("horizon"),
+                "el manifest sigue apuntando a Horizon: {}",
+                rel.url
+            );
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(res.resolved.is_none(), "sin binario para esta plataforma no debe resolver");
+            assert!(res.reason.unwrap_or_default().contains("drakes-rust-client"));
+        }
 
         // un perfil stable NO resuelve un nightly (regla de canales, no un bug)
         let mut stable = p.clone();

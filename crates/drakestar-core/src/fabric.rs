@@ -567,7 +567,13 @@ mod tests {
 
         // flags de sistema: solo los nuestros
         assert!(plan.args.contains(&"--enable-native-access=ALL-UNNAMED".to_string()));
-        assert!(!plan.args.iter().any(|a| a.contains("HeapDumpPath")));
+        // HeapDumpPath lo manda Mojang solo para Windows: ahí debe colarse tal
+        // cual; en cualquier otro sistema no aparece
+        if cfg!(windows) {
+            assert!(plan.args.contains(&"-XX:HeapDumpPath=x".to_string()));
+        } else {
+            assert!(!plan.args.iter().any(|a| a.contains("HeapDumpPath")));
+        }
         assert!(!plan.args.iter().any(|a| a.contains("startOnFirstThread") || os_name() == "osx"));
         // demo, 32 bits y placeholders desconocidos: fuera
         assert!(!plan.args.contains(&"--demo".to_string()));

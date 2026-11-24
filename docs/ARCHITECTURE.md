@@ -28,6 +28,7 @@ crates/drakestar-net  (descargas https con SHA-256 en streaming)
 | `server` | servidor local gestionado (DrakesPurpur 26.x / Purpur + Slimefun): descarga, `server.properties`, plan de arranque, espera de puerto |
 | `install`, `assets`, `java`, `fabric`, `mods` | descargas verificadas (SHA-1/256/512), JRE Temurin por versión, perfil Fabric, Modrinth, Fused |
 | `launch`, `play` | plan de argumentos y proceso del juego, preparación completa |
+| `horizon` | motor nativo (modo DrakesRust / Horizon 26.3): descarga y verificación del paquete por plataforma (Windows x64/arm64, Linux, macOS arm64), extracción, `horizon-prepare` con JDK gestionado y plan de lanzamiento |
 | `msa`, `accounts`, `offline` | login de Microsoft por código de dispositivo, varias cuentas, tokens aparte (`secrets.json`), UUID sin premium |
 | `instances`, `settings` | instancias y plantillas, ajustes (idioma, privacidad, client ID) |
 | `support` | registros con rotación, tachador de datos personales, paquete de reporte y envío |

@@ -185,7 +185,7 @@ mod tests {
             &rust_profile(Some("mc.drakescraft.cl")),
             "/bin/drakestar-rust-client",
             "/d",
-            "JackStar",
+            "Jugador",
             Some("12345678-1234-1234-1234-123456789abc"),
             Some("token_xyz"),
         )
@@ -194,7 +194,7 @@ mod tests {
             auth_plan.args,
             vec![
                 "--server", "mc.drakescraft.cl",
-                "--name", "JackStar",
+                "--name", "Jugador",
                 "--uuid", "12345678-1234-1234-1234-123456789abc",
                 "--token", "token_xyz"
             ]

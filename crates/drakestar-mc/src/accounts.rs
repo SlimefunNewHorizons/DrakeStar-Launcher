@@ -325,7 +325,7 @@ mod tests {
     fn microsoft_secret_is_stored_apart() {
         let d = tmp("b");
         let a = Accounts::new(&d);
-        let acc = a.add_microsoft(&McProfile { name: "Pro".into(), uuid: "069a79f4-44e9-4726-a5be-fca90e38aaf5".into(), access_token: "tok".into(), xuid: None }, "REFRESH-SECRET").unwrap();
+        let acc = a.add_microsoft(&McProfile { name: "Pro".into(), uuid: "00112233-4455-6677-8899-aabbccddeeff".into(), access_token: "tok".into(), xuid: None }, "REFRESH-SECRET").unwrap();
         let public = std::fs::read_to_string(d.root().join("accounts/accounts.json")).unwrap();
         assert!(!public.contains("REFRESH-SECRET"));
         let secrets = std::fs::read_to_string(d.root().join("accounts/secrets.json")).unwrap();

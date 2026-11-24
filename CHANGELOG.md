@@ -12,6 +12,21 @@
 - El launcher conserva `instances.json` si está dañado o no se puede leer. Guardar, retirar o abrir una instancia devuelve el error sin reemplazar sus perfiles por plantillas.
 - Si no puede leer las instancias, muestra un aviso persistente en Jugar e Instancias con reintento y acceso a la carpeta de datos. No permite jugar con perfiles obsoletos ni confunde el fallo con un catálogo vacío.
 
+## 0.7.2 — Motor nativo (Horizon / DrakesRust) en Windows, release por CI y purge de datos personales (2026-11-24)
+
+**Arreglado**
+- **El motor nativo funciona en Windows** (`horizon.rs`): el modo DrakesRust / Horizon 26.3 ya no fallaba al instalar en Windows ("sin release fijado"). Se fija el paquete por plataforma (`horizon-windows-x64.zip`, `horizon-windows-arm64.zip`, además del `.tar.gz` de Linux y el `.zip` de macOS arm64) y la extracción ya **no depende del `tar` del sistema**: se hace en proceso con las librerías `tar`/`flate2`/`zip` (el paquete de Windows es un `.zip`), quitando la carpeta de la plataforma y rechazando rutas que se salgan del destino. La instalación extrae a un lado y sustituye solo si quedó completa, y marca ejecutables los binarios donde el `.zip` no guarda permisos.
+- **Título de ventana**: `wmctrl` es solo X11; el renombrado ahora es un no-op documentado en Windows/macOS (antes se reintentaba 10 s sin sentido) y la variable `WINIT_UNIX_BACKEND` solo se envía en Linux.
+- **`--game-dir` en el plan del motor**: la carpeta de juego (mods, saves, opciones) vive en la instancia, como en el modo Java.
+- **Credenciales personales fuera del repo**: la vista de muestra del navegador ya no muestra la cuenta de JackStar6677 (mock con nombre y UUID ficticios) y los fixtures de pruebas usan nombres neutros.
+
+**Nuevo**
+- **Publicar por CI sin compilar a mano**: `tools/bump-release.mjs` (`npm run bump-release -- X.Y.Z`) sincroniza `Cargo.toml`, `src-tauri/tauri.conf.json`, `ui/package.json`, commitea, etiqueta y empuja; el workflow `release.yml` compila en Windows/Ubuntu/macOS, firma y sube `latest.json`. Guía en [docs/PUBLICAR.md](docs/PUBLICAR.md#publicar-una-versión-con-el-ci-no-compiles-a-mano).
+
+**Pruebas**
+- `drakestar-mc`: 41 en verde en Windows (eran 38). Dos pruebas que comparaban rutas con `/` fallaban en Windows por el separador; las nuevas cubren la URL por plataforma y la extracción de `.zip` y `.tar.gz` sin la carpeta raíz.
+- **Todo el workspace en verde en Windows** (183 pruebas): tres pruebas de los crates heredados daban por hecho Linux. `drakestar-core`: `-XX:HeapDumpPath` lo manda Mojang solo a Windows. `drakestar-app`: la librería solo-Windows de Fabric entra solo en Windows, y la resolución del manifiesto comprometido se comprueba en las dos caras. `drakestar-rust-client`: los servidores mínimos de dos pruebas cerraban sin leer el saludo del cliente, y en Windows eso provoca un RST que aborta la lectura antes de llegar el paquete.
+
 ## 0.7.1 — Zero-Config, Slimefun Local Auto-Connect & Horizon JAVA_HOME fix (2026-11-19)
 
 **Arreglado**

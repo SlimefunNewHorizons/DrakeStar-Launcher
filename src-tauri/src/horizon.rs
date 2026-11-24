@@ -16,7 +16,6 @@ use drakestar_mc::Dirs;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Serialize)]
@@ -32,7 +31,8 @@ pub struct HzStatus {
 #[tauri::command]
 pub fn horizon_status(st: State<'_, AppState>) -> Result<HzStatus, String> {
     let dirs = st.dirs.clone();
-    let hz = Hz { shared: horizon::shared_dir(&dirs), home: dirs.root().join("horizon-home") };
+    // `game` solo lo usa el lanzamiento: aqui da igual (el estado es compartido)
+    let hz = Hz { shared: horizon::shared_dir(&dirs), home: dirs.root().join("horizon-home"), game: dirs.root().join("horizon-home") };
     let binaries = hz.installed();
     let resources = hz.resources().is_dir();
     let java = drakestar_mc::java::installed(&dirs, horizon::PREPARE_JAVA).is_some();
@@ -80,7 +80,7 @@ pub fn horizon_install(app: AppHandle, st: State<'_, AppState>) -> Result<(), St
     let dirs = st.dirs.clone();
     let sink = Sink { app: app.clone(), dirs: dirs.clone(), cancel: CancelFlag::default(), cur: Mutex::new((String::new(), String::new())) };
     sink.stage("horizon", "Descargando el cliente nativo");
-    let hz = Hz { shared: horizon::shared_dir(&dirs), home: dirs.root().join("horizon-home") };
+    let hz = Hz { shared: horizon::shared_dir(&dirs), home: dirs.root().join("horizon-home"), game: dirs.root().join("horizon-home") };
     let r = horizon::install(&hz).map_err(s);
     st.busy.store(false, Ordering::SeqCst);
     let _ = app.emit("progress", serde_json::json!({ "stage": "horizon", "text": "", "fraction": 1.0 }));
@@ -220,12 +220,10 @@ pub fn horizon_play(app: AppHandle, st: State<'_, AppState>, instance_id: String
             Ok(h) => {
                 *st.game.lock().unwrap() = Some(h.clone());
                 emit("running", String::new());
-                // la ventana arranca como "Horizon": se renombra en cuanto aparece
+                // la ventana arranca como "Horizon": se renombra en cuanto
+                // aparece (solo X11; en Windows/macOS se deja como está)
                 if let Some(pid) = h.pid() {
-                    let title = horizon::WINDOW_TITLE.to_string();
-                    std::thread::spawn(move || {
-                        horizon::retitle(pid, &title, 40, Duration::from_millis(250));
-                    });
+                    horizon::spawn_retitle(pid);
                 }
             }
             Err(e) => {

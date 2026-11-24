@@ -81,7 +81,7 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
 // ---------- datos de ejemplo del modo navegador (?fresh = primer arranque, ?update = hay version nueva) ----------
 const fresh = query.includes('fresh');
 const mockState = {
-  accounts: fresh ? ({ accounts: [], default: null } as AccountList) : { accounts: [{ id: 'msa-1', kind: 'microsoft', name: 'JackStar6677', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', added_at: 1, last_used: 2 }, { id: 'offline-1', kind: 'offline', name: 'Invitado', uuid: 'b50ad385-829d-3141-a216-7e7d7539ba7f', added_at: 1 }], default: 'msa-1' } as AccountList,
+  accounts: fresh ? ({ accounts: [], default: null } as AccountList) : { accounts: [{ id: 'msa-1', kind: 'microsoft', name: 'Jugador Demo', uuid: '00000000-0000-4000-8000-000000000000', added_at: 1, last_used: 2 }, { id: 'offline-1', kind: 'offline', name: 'Invitado', uuid: '11111111-1111-4111-8111-111111111111', added_at: 1 }], default: 'msa-1' } as AccountList,
   instances: [
     { id: 'drakescraft', name: 'DrakesCraft (online)', mc: '1.21.11', loader: 'fabric', target: { kind: 'server', address: 'mc.drakescraft.cl:25565' }, performance: true, fused: false, xmx_mb: 4096, extra_jvm: [], note: 'Entra directo al servidor oficial.' },
     { id: 'slimefun-solo', name: 'Slimefun en solitario / LAN', mc: '26.2', loader: 'fabric', target: { kind: 'local', port: 25570, lan: false }, performance: true, fused: true, xmx_mb: 3072, extra_jvm: [], note: 'Servidor propio en tu equipo con el monolito DrakesPurpur embebido en el cliente con Fused.' },
@@ -105,7 +105,7 @@ async function mock<T>(cmd: string, a: Record<string, any>): Promise<T> {
     case 'account_remove': mockState.accounts.accounts = mockState.accounts.accounts.filter((x) => x.id !== a.id); return ok(undefined);
     case 'account_set_default': mockState.accounts.default = a.id; return ok(undefined);
     case 'msa_start': {
-      setTimeout(() => emitMock('msa', { phase: 'success', message: 'Sesion iniciada como JackStar6677', account: mockState.accounts.accounts[0] } satisfies MsaEvent), 4000);
+      setTimeout(() => emitMock('msa', { phase: 'success', message: 'Sesion iniciada (vista de muestra)', account: mockState.accounts.accounts[0] } satisfies MsaEvent), 4000);
       return ok({ device_code: 'x', user_code: 'ABCD1234', verification_uri: 'https://www.microsoft.com/link', verification_uri_complete: null, interval: 5, expires_in: 900 });
     }
     case 'msa_cancel': return ok(undefined);

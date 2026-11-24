@@ -1,0 +1,12 @@
+{
+  "name": "drakestar-launcher",
+  "private": true,
+  "description": "Launcher DrakeStar (DrakesCraft). Scripts de release; la interfaz vive en ui/ y se construye con cd ui && npm ci && npm run build.",
+  "scripts": {
+    "dev": "npm --prefix ui run dev",
+    "bump-release": "node tools/bump-release.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

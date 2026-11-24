@@ -572,7 +572,9 @@ mod tests {
         };
         let a = artifacts(&l, "cli", &v, &f);
         // logging + asm(meta) + loader(sidecar) + intermediary(sidecar) + cliente
-        assert_eq!(a.len(), 5, "nombres: {:?}", a.iter().map(|x| x.name.clone()).collect::<Vec<_>>());
+        // (+ la libreria solo-Windows cuando se corre en Windows)
+        let esperadas = if cfg!(windows) { 6 } else { 5 };
+        assert_eq!(a.len(), esperadas, "nombres: {:?}", a.iter().map(|x| x.name.clone()).collect::<Vec<_>>());
         assert_eq!(a.last().unwrap().name, "minecraft");
         assert_eq!(a.last().unwrap().dest, l.instance_dir("cli").join("client.jar"));
         assert!(a[..a.len() - 1].iter().all(|x| x.dest.starts_with(l.instance_dir("cli").join("libraries"))));
@@ -585,8 +587,13 @@ mod tests {
             assert_eq!(x.hash, s);
             assert!(x.url.starts_with("https://maven.fabricmc.net/"), "{}", x.url);
         }
-        // la libreria solo-Windows no entra en Linux; la entrada sin url/hash se ignora
-        assert!(!a.iter().any(|x| x.name.contains("only-win")));
+        // la libreria solo-Windows entra solo donde corre la prueba; la entrada sin
+        // url/hash se ignora igual en todos los sistemas
+        if cfg!(windows) {
+            assert!(a.iter().any(|x| x.name == "org.x:only-win:1"));
+        } else {
+            assert!(!a.iter().any(|x| x.name.contains("only-win")));
+        }
         assert!(!a.iter().any(|x| x.name.contains("launchwrapper")));
     }
 
@@ -621,8 +628,8 @@ mod tests {
         assert_eq!(username(&s2, &p), "cli");
         s2.username = Some("nix".into());
         assert_eq!(username(&s2, &p), "nix");
-        s2.session_name = Some("JackStar".into());
-        assert_eq!(username(&s2, &p), "JackStar");
+        s2.session_name = Some("Jugador".into());
+        assert_eq!(username(&s2, &p), "Jugador");
     }
 
     /// Smoke test REAL contra los servidores de Mojang y Fabric: resuelve,
