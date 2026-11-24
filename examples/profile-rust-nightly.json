@@ -1,2 +1,0 @@
-{ "schema": 1, "id": "rust-nightly", "name": "DrakesRust (nightly)", "mode": "drakes-rust", "channel": "nightly",
-  "minecraft": "26.2", "server": "localhost" }
