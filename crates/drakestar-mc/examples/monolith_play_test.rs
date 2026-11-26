@@ -131,7 +131,7 @@ fn main() {
                 cli_window2.store(true, Ordering::SeqCst);
                 println!("[client] {line}");
             }
-            if line.contains("Connecting to 127.0.0.1") || line.contains("Connecting to") || line.contains("Setting user:") {
+            if line.contains("Connecting to") {
                 cli_connecting2.store(true, Ordering::SeqCst);
                 println!("[client] {line}");
             }
@@ -150,9 +150,6 @@ fn main() {
         if sv_joined.load(Ordering::SeqCst) {
             println!("OK Cliente conectado al servidor local DrakesPurpur!");
             std::thread::sleep(Duration::from_secs(3));
-            break;
-        }
-        if cli_window.load(Ordering::SeqCst) && cli_connecting.load(Ordering::SeqCst) && t0.elapsed() > Duration::from_secs(25) {
             break;
         }
     }
@@ -180,6 +177,7 @@ fn main() {
 
     assert!(sv_stopped, "el servidor local no termino tras sv.kill()");
     assert!(port_free, "el puerto {} no se libero tras sv.kill()", ls.port);
-    assert!(got_window || got_connect, "el cliente no llego a abrir ventana/conectar");
+    assert!(got_window, "el cliente no abrio ventana");
+    assert!(got_join, "el cliente no entro al servidor local (sin 'joined the game' en {} s)", secs);
     println!("EXITO TOTAL: End-to-End Slimefun Local verificado!");
 }

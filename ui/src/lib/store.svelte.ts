@@ -154,8 +154,8 @@ class Store {
   }
 
   // ---------- instancias ----------
-  async openInstanceFolder(id: string) {
-    try { await api.openFolder('instance', id); } catch (e) { this.toast('error', errText(e)); }
+  async openInstanceFolder(id: string, sub: 'instance' | 'mods' | 'resourcepacks' | 'shaderpacks' = 'instance') {
+    try { await api.openFolder(sub, id); } catch (e) { this.toast('error', errText(e)); }
   }
   select(id: string) {
     this.selected = id;

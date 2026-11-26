@@ -56,7 +56,7 @@ export const api = {
   horizonStop: () => call<void>('horizon_stop'),
   logs: (source: 'launcher' | 'game', instance: string | null, maxLines = 400) => call<string[]>('logs_read', { source, instance, maxLines }),
   report: (instance: string | null, send: boolean) => call<ReportInfo>('support_report', { instance, send }),
-  openFolder: (kind: 'instance' | 'logs' | 'support' | 'data', id?: string) => call<void>('open_folder', { kind, id }),
+  openFolder: (kind: 'instance' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'logs' | 'support' | 'data', id?: string) => call<void>('open_folder', { kind, id }),
   openUrl: (url: string) => call<void>('open_url', { url }),
 };
 

@@ -51,7 +51,7 @@
       <select id="catalog-instance" value={instance.id} disabled={app.busy} onchange={(e) => app.select(e.currentTarget.value)}>
         {#each app.instances as i (i.id)}<option value={i.id}>{i.name} · {i.mc} · {i.loader}</option>{/each}
       </select>
-      <button class="btn" type="button" onclick={() => app.openInstanceFolder(instance.id)}>{t('common.open_folder')}</button>
+      <button class="btn" type="button" onclick={() => app.openInstanceFolder(instance.id, kind === 'mod' ? 'mods' : kind === 'shader' ? 'shaderpacks' : 'resourcepacks')}>{t('common.open_folder')}</button>
     </div>
     <form class="row" onsubmit={(e) => { e.preventDefault(); search(); }}>
       <label for="catalog-kind">{t('cat.type')}</label>

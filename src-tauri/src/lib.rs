@@ -470,7 +470,14 @@ async fn support_report(st: State<'_, AppState>, instance: Option<String>, send:
 #[tauri::command]
 fn open_folder(app: AppHandle, st: State<'_, AppState>, kind: String, id: Option<String>) -> Res<()> {
     let path = match (kind.as_str(), id) {
-        ("instance", Some(id)) if safe_id(&id) => st.dirs.instance(&id),
+        ("instance" | "mods" | "resourcepacks" | "shaderpacks", Some(id)) if safe_id(&id) => {
+            let dir = st.dirs.instance(&id);
+            if !dir.is_dir() {
+                return Err("la instancia no existe".into());
+            }
+            if kind == "instance" { dir } else { dir.join(&kind) }
+        }
+        ("instance" | "mods" | "resourcepacks" | "shaderpacks", _) => return Err("instancia no válida".into()),
         ("logs", _) => support::log_dir(&st.dirs),
         ("support", _) => st.dirs.root().join("support"),
         _ => st.dirs.root().to_path_buf(),
