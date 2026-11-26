@@ -1,0 +1,10 @@
+FROM fedora:43@sha256:3a515a26e06ffe17847b46f2f71a45140180ba2e39206d9c83fde648f0767cad
+RUN dnf -y --setopt=install_weak_deps=False install \
+    webkit2gtk4.1 gtk3 libappindicator-gtk3 python3 python3-rpm cpio \
+    xorg-x11-server-Xvfb xorg-x11-xauth xdotool ImageMagick dbus-x11 \
+    openbox dejavu-sans-fonts util-linux shadow-utils \
+    && dnf clean all \
+    && useradd --create-home --uid 10001 smoke
+COPY install-smoke.py gui-probe.py package_backend.py /fixture/
+ENV DRAKESTAR_INSTALL_FIXTURE=1
+ENTRYPOINT ["python3", "/fixture/install-smoke.py"]

@@ -4,6 +4,99 @@ Guiones para validar la app Tauri real con Xvfb + xdotool (probado en WSL2 / Ubu
 
 Requisitos: `xvfb xdotool imagemagick`, la app compilada (`ui/node_modules/.bin/tauri build --debug --no-bundle`) y una carpeta de datos ya descargada para no esperar a Java y los assets.
 
+Para revisar el empaquetado Linux sin instalar ni ejecutar la app:
+
+```bash
+python3 tools/e2e/check-linux-release.py DrakeStar_0.6.0_amd64.deb --version 0.6.0
+```
+
+Requiere `dpkg-deb` y `readelf`. Comprueba version, entrada de escritorio y dependencias GTK/WebKit del ejecutable, e imprime sus SHA-256. Tambien acepta un ELF suelto para detectar el CLI empaquetado por error en 0.5.0. Es una comprobacion estatica: no acredita render, IPC, firma ni actualizacion real en una maquina limpia.
+
+## Instalación y actualización Debian en Ubuntu limpio
+
+`linux-install/` instala los `.deb` oficiales en un contenedor nuevo de Ubuntu
+24.04 (imagen base fijada por digest), comprueba versión y entrada de escritorio,
+arranca cada versión con un usuario sin privilegios y conserva un archivo
+centinela **sintético** dentro de `instances/.../saves` durante la actualización
+por `dpkg`. Comprueba que el ejecutable instalado coincide con el del paquete;
+el centinela no representa una partida jugable. No monta datos del usuario.
+
+```bash
+mkdir -p /tmp/drakestar-packages /tmp/drakestar-install-evidence
+gh release download v0.5.2 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.deb' --dir /tmp/drakestar-packages
+gh release download v0.6.0 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.deb' --dir /tmp/drakestar-packages
+~/ai-hub/scripts/build_seguro.sh 25 "$PWD" docker build -t drakestar-installer-smoke tools/e2e/linux-install
+docker run --rm --init --cpus 1 --memory 2g --pids-limit 512 --network none \
+  -v /tmp/drakestar-packages:/packages:ro \
+  -v /tmp/drakestar-install-evidence:/evidence \
+  drakestar-installer-smoke /packages/DrakeStar_0.5.2_amd64.deb /packages/DrakeStar_0.6.0_amd64.deb
+```
+
+`result.json`, logs de `dpkg`, logs de sesión y dos capturas quedan en la carpeta
+de evidencia. El ensayo exige una ventana visible cuyo PID pertenece al launcher
+y que siga vivo después de capturar; **hay que revisar las imágenes** para
+confirmar contenido, versión e IPC. Una ventana vacía no acredita render.
+La preparación usa red para instalar dependencias; el ensayo exige `--network
+none`. Solo en este contenedor desechable, WebKit usa el aislamiento exterior
+de Docker en lugar de su sandbox de namespaces y render por software en Xvfb.
+La ejecución directa en el host se rechaza antes de instalar.
+
+Esto comprueba el instalador `.deb` y la actualización mediante el gestor de
+paquetes. Para 0.6.0, también desactiva los reportes y pulsa «Empezar» mediante
+clics X11 en una ventana de 1100×720 (coordenadas propias de esa versión):
+exige que el backend guarde ambos ajustes desde sus
+valores iniciales y captura `onboarding.png`. No exporta identificadores de
+dispositivo ni escribe esos ajustes desde el guion. Quedan aparte el
+actualizador firmado de la aplicación, `.rpm`, `.msi`,
+Minecraft y la instalación en una máquina física o VM con escritorio completo.
+Los artefactos del actualizador y su firma se describen en la
+[documentación oficial de Tauri](https://v2.tauri.app/plugin/updater/).
+
+## Instalación y actualización RPM en Fedora limpio
+
+El mismo runner acepta dos `.rpm` y `Dockerfile.rpm` prepara Fedora 43 x86_64
+fijado por digest, con las dependencias gráficas y sin el launcher instalado.
+La preparación usa DNF; el ensayo sin red instala y actualiza con
+[`rpm --upgrade`](https://rpm.org/docs/latest/man/rpm.8.html), conservando
+las comprobaciones de dependencias y verificando los archivos instalados.
+Compara epoch/versión/release mediante RPM y exige un avance estricto; no
+acepta mezclas de formatos ni paquetes de otra identidad o arquitectura.
+
+```bash
+mkdir -p /tmp/drakestar-rpms /tmp/drakestar-rpm-evidence
+gh release download v0.5.2 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.rpm' --dir /tmp/drakestar-rpms
+gh release download v0.6.0 -R SlimefunNewHorizons/DrakeStar-Launcher --pattern '*.rpm' --dir /tmp/drakestar-rpms
+~/ai-hub/scripts/build_seguro.sh 25 "$PWD" docker build -f tools/e2e/linux-install/Dockerfile.rpm -t drakestar-installer-rpm tools/e2e/linux-install
+docker run --rm --init --cpus 1 --memory 2g --pids-limit 512 --network none \
+  -v /tmp/drakestar-rpms:/packages:ro \
+  -v /tmp/drakestar-rpm-evidence:/evidence \
+  drakestar-installer-rpm /packages/DrakeStar-0.5.2-1.x86_64.rpm /packages/DrakeStar-0.6.0-1.x86_64.rpm
+```
+
+Usar una carpeta de evidencia vacía en cada ejecución. Conserva los mismos
+controles de centinela sintético, payload SHA-256, capturas y bienvenida de
+Debian; los logs de transacciones se llaman `rpm.log`. Las capturas requieren
+revisión visual. Los SHA identifican los paquetes descargados y sus payloads;
+no acreditan firma editorial ni correspondencia fuente→binario. El alcance
+continúa siendo el gestor de paquetes en un contenedor, sin actualizador
+interno, MSI, escritorio completo ni juego real.
+
+Ensayo del 17-nov-2026: instalación 0.5.2 → actualización 0.6.0 completadas en
+Fedora 43 nuevo y sin red, con las tres capturas revisadas y ambos ajustes de
+bienvenida guardados por la aplicación. El mismo runner volvió a pasar en
+Ubuntu 24.04.5 para descartar regresiones Debian. Ambos terminaron con salida
+0; las 14 regresiones Python del fixture pasaron. Fedora no emitió mensajes
+en el log de la app; Ubuntu conservó su aviso AT-SPI de la imagen mínima.
+
+Regresión del propio capturador, sin abrir ventanas ni instalar paquetes:
+
+```bash
+python3 -m unittest discover -s tools/e2e/linux-install -p 'test_*.py' -v
+```
+
+Comprueba que una salida durante la captura nunca escribe evidencia de éxito y
+que tanto el launcher como el gestor de ventanas se limpian en ambos caminos.
+
 ```bash
 # 1) arrancar Xvfb :99 + la app (deja la sesion abierta; usar otra terminal para el resto)
 DS_APP=target/debug/drakestar-launcher DS_E2E_DATA=$HOME/.drakestar-test bash tools/e2e/start.sh
