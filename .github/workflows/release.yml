@@ -70,22 +70,24 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'DrakeStar ${{ github.ref_name }}'
           releaseBody: |
-            Launcher de Minecraft de DrakesCraft: un boton **JUGAR** que instala Java, el juego y los mods y abre Minecraft **1.20 a 26.2** con tu cuenta de Microsoft o sin premium.
+            Launcher de Minecraft de DrakesCraft: un boton **JUGAR** que instala Java, el juego y los mods y abre Minecraft **1.20 a 26.2** con tu cuenta de Microsoft, sin premium o de Ely.by.
 
             ### Que cambia
-            - **JUGAR abre Minecraft de verdad** (antes el modo Slimefun solo levantaba un servidor). Java gestionado por version, sin depender del Java del sistema.
-            - **Cuentas**: login de Microsoft que abre el navegador solo, y varias cuentas por PC, premium y sin premium.
-            - **Interfaz nueva y simple**: Jugar, Cuentas, Instancias, Ajustes y Registros (es/en).
-            - **Registros y reportes**: guarda los logs del launcher y del juego; si el juego se cierra con error envia un reporte solo para depurar, con datos personales tachados (se puede desactivar en Ajustes).
-            - **Actualizacion automatica firmada** y modo sin conexion con lo ya instalado.
-            - Instancias con mods de rendimiento (Sodium, Lithium...) y **DrakeStar Fused** (alfa, un solo jar para 1.20 a 26.2).
+            - **Catalogo Modrinth** por instancia (mods Fabric, resource packs y shaders) e **importar instancias** de otros launchers, con memoria recomendada segun tu RAM.
+            - **Cuentas Ely.by** con 2FA y authlib-injector verificado, junto a Microsoft y sin premium.
+            - **Diagnostico** que reune fallo, etapa, instancia y salida del juego, con vuelta a Jugar, cuentas o edicion.
+            - **Fused embebido** (slimefun-solo): el servidor 26.x corre dentro del cliente cuando Fused trae el host Bukkit; si no, servidor local como siempre.
+            - **Selector local/LAN** y puerto para el servidor local.
+            - **El motor nativo (Horizon/DrakesRust) ya funciona en Windows** (x64 y arm64), ademas de Linux y macOS.
+
+            Notas completas y versiones anteriores: [CHANGELOG.md](https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/blob/${{ github.ref_name }}/CHANGELOG.md).
 
             ### Instalar
             Windows `.exe` (recomendado: instala por usuario y no pide permisos de administrador para actualizar) o `.msi`; Linux `.deb`, `.rpm` o `.AppImage`; macOS `.dmg`.
-            Las versiones 0.5.x no tienen actualizador: instala esta una vez y desde aqui se actualiza sola (Ajustes, Buscar actualizaciones).
 
-            ### Pendiente
-            El login de Microsoft usa un client ID temporal hasta que Mojang apruebe la app propia de DrakeStar; si falla, usa una cuenta sin premium. Guia completa: [docs/LAUNCHER.md](https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/blob/main/docs/LAUNCHER.md).
+            Las versiones 0.5.x no tienen actualizador: instala esta una vez y desde aqui se actualiza sola (Ajustes, Buscar actualizaciones).
+            Si Microsoft rechaza el inicio de sesion, usa una cuenta sin premium o de Ely.by mientras se aprueba la app propia.
+            Guia completa: [docs/LAUNCHER.md](https://github.com/SlimefunNewHorizons/DrakeStar-Launcher/blob/${{ github.ref_name }}/docs/LAUNCHER.md).
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

@@ -1,12 +1,16 @@
 # Cambios
 
-## Sin publicar
+## 0.7.2 — Catálogo Modrinth, Ely.by, Fused embebido y motor nativo en Windows (2026-11-27)
 
 **Nuevo**
 - **Catálogo Modrinth** por instancia para mods Fabric, resource packs y shaders: filtro de versión, instalar/quitar, dependencias requeridas, Iris para shaders, SHA-512 y protección de archivos externos.
 - **Cuentas Ely.by** con 2FA, renovación de token y authlib-injector oficial fijado y verificado; disponibles junto a Microsoft y sin premium. Pendiente validación con cuenta real.
 - **Diagnóstico** reúne fallo/etapa/instancia y salida de juego con regreso a Jugar, cuentas o edición. Carpeta de instancia accesible también desde Jugar y Catálogo, con errores visibles.
 - Alcance, pruebas y evaluación separada de Starling Android: [docs/STARLING.md](docs/STARLING.md); atribuciones en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Importar instancias** de Prism/MultiMC/CurseForge y **recomendar memoria** según la RAM del equipo, con presets dentro de rango.
+- **Selector local/LAN y puerto** en instancias de servidor local: abre en 127.0.0.1 o en la red local con el puerto que elijas.
+- **Fused embebido**: el servidor local 26.x corre dentro del propio cliente (sin segundo proceso) cuando Fused trae el host Bukkit.
+- **Smoke de instaladores**: CI verifica las firmas del actualizador y los instaladores MSI/NSIS en Windows limpio.
 - **Publicar por CI sin compilar a mano**: `tools/bump-release.mjs` (`npm run bump-release -- X.Y.Z`) sincroniza `Cargo.toml`, `src-tauri/tauri.conf.json`, `ui/package.json`, commitea, etiqueta y empuja; el workflow `release.yml` compila en Windows/Ubuntu/macOS, firma y sube `latest.json`. Guía en [docs/PUBLICAR.md](docs/PUBLICAR.md#publicar-una-versión-con-el-ci-no-compiles-a-mano).
 **Arreglado**
 - El launcher conserva `instances.json` si está dañado o no se puede leer. Guardar, retirar o abrir una instancia devuelve el error sin reemplazar sus perfiles por plantillas.
